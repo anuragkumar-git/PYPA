@@ -1725,9 +1725,9 @@ function App() {
                     <Bookmark size={16} />
                     {currentState?.marked ? "Unmark" : "Review"}
                   </button>
-                  <button className="button outline" onClick={() => saveNote()}>
+                  {/* <button className="button outline" onClick={() => saveNote()}>
                     <Save size={15} /> Save note
-                  </button>
+                  </button> */}
                   {!checked ? (
                     <button
                       className="button primary"
