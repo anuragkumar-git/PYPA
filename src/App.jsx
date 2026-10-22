@@ -1037,7 +1037,10 @@ function App() {
       ),
       correctAnswerIndex: answerIndex,
       correctAnswer: Number.isInteger(answerIndex) ? options[answerIndex] : "",
-
+      // Track whether the answer was explicitly verified by the user.
+      answerValidation: editDraft.verified
+        ? "source-key-verified"
+        : "source-key-unverified",
       // A user can resolve image-only review without silently clearing unrelated review flags.
       visualReviewNeeded:
         editDraft.verified || imageReviewResolved
