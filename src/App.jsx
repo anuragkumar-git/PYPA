@@ -302,6 +302,9 @@ function App() {
   const [coveragePaper, setCoveragePaper] = useState("");
   const [coverageStatus, setCoverageStatus] = useState("All");
   const [coverageSearch, setCoverageSearch] = useState("");
+  // New: independent filters for the questions in the selected paper.
+  const [coverageSubject, setCoverageSubject] = useState("All");
+  const [coverageTopic, setCoverageTopic] = useState("All");
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [importMessage, setImportMessage] = useState("");
   const [editingQuestionId, setEditingQuestionId] = useState(null);
@@ -319,6 +322,9 @@ function App() {
         if (cancelled) return;
         setBank(questions);
         setCoveragePaper(questions[0]?.paperId || "");
+        // Reset coverage filters after importing a new set of questions.
+        setCoverageSubject("All");
+        setCoverageTopic("All");
       })
       .catch((error) => {
         if (!cancelled)
@@ -1206,10 +1212,47 @@ function App() {
     return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
   }, [bank, progress]);
 
+  // New: subjects available only in the currently selected paper.
+  const coverageSubjects = useMemo(
+    () =>
+      [
+        ...new Set(
+          bank
+            .filter((q) => q.paperId === coveragePaper)
+            .map((q) => q.subject)
+            .filter(Boolean),
+        ),
+      ].sort(),
+    [bank, coveragePaper],
+  );
+
+  // New: topics are limited to the selected subject within the selected paper.
+  const coverageTopics = useMemo(
+    () =>
+      [
+        ...new Set(
+          bank
+            .filter(
+              (q) =>
+                q.paperId === coveragePaper &&
+                (coverageSubject === "All" || q.subject === coverageSubject),
+            )
+            .map((q) => q.topic)
+            .filter(Boolean),
+        ),
+      ].sort(),
+    [bank, coveragePaper, coverageSubject],
+  );
+
   const coverageQuestions = useMemo(
     () =>
       bank
-        .filter((q) => q.paperId === coveragePaper)
+        .filter(
+          (q) =>
+            q.paperId === coveragePaper &&
+            (coverageSubject === "All" || q.subject === coverageSubject) &&
+            (coverageTopic === "All" || q.topic === coverageTopic),
+        )
         .filter((q) => {
           const state = getState(progress, q);
           const status = questionStatus(q, progress);
@@ -1233,7 +1276,15 @@ function App() {
           return statusMatch && searchMatch;
         })
         .sort((a, b) => a.questionNumber - b.questionNumber),
-    [bank, coveragePaper, coverageStatus, coverageSearch, progress],
+    [
+      bank,
+      coveragePaper,
+      coverageSubject,
+      coverageTopic,
+      coverageStatus,
+      coverageSearch,
+      progress,
+    ],
   );
 
   const paperStats = useMemo(
@@ -1787,6 +1838,8 @@ function App() {
                       className="paper-card-select"
                       onClick={() => {
                         setCoveragePaper(p.id);
+                        setCoverageSubject("All"); // Reset subject for the new paper.
+                        setCoverageTopic("All"); // Reset topic for the new paper.
                         setCoverageOpen(true);
                       }}
                     >
@@ -1850,6 +1903,38 @@ function App() {
                           "Needs review",
                         ].map((s) => (
                           <option key={s}>{s}</option>
+                        ))}
+                      </select>
+                      {/* New: filter questions by subject within the selected paper. */}
+                      <select
+                        value={coverageSubject}
+                        onChange={(e) => {
+                          setCoverageSubject(e.target.value);
+
+                          // Reset topic because it may not belong to the newly selected subject.
+                          setCoverageTopic("All");
+                        }}
+                        aria-label="Filter questions by subject"
+                      >
+                        <option value="All">All subjects</option>
+                        {coverageSubjects.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* New: available topics depend on the selected subject. */}
+                      <select
+                        value={coverageTopic}
+                        onChange={(e) => setCoverageTopic(e.target.value)}
+                        aria-label="Filter questions by topic"
+                      >
+                        <option value="All">All topics</option>
+                        {coverageTopics.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
                         ))}
                       </select>
                     </div>
