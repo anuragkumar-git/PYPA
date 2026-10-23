@@ -1606,7 +1606,7 @@ function App() {
             </div>
           )}
           {/* Target for scrolling directly to the opened question. */}
-          <section className="panel quiz-panel" id="quiz-panel">  
+          <section className="panel quiz-panel" id="quiz-panel">
             {!current ? (
               completedSession ? (
                 <div className="completion">
@@ -2496,9 +2496,7 @@ function App() {
                                       )
                                         .replace(/\s+/g, " ")
                                         .slice(0, 450)}
-                                      {(q.question || "").length > 170
-                                        ? "…"
-                                        : ""}
+                                      {(q.question || "").length > 450 && "…"}
                                     </strong>
                                     {q.questionImage && (
                                       <div className="source-image-wrap">
@@ -2558,7 +2556,7 @@ function App() {
                                     )}
                                     {q.notes && (
                                       <small className="saved-note">
-                                       {q.notes}
+                                        {q.notes}
                                       </small>
                                     )}
                                   </div>
