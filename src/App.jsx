@@ -1782,7 +1782,7 @@ function App() {
                             current.options[current.correctAnswerIndex]
                         : "Answer key unavailable"}
                     </span>
-                    {current.notes && <small>NOTE: {current.notes}</small>}
+                    {current.notes && <small>{current.notes}</small>}
                     {current.answerValidation === "source-key-unverified" && (
                       <small>
                         Answer key has not been independently verified.
@@ -2558,7 +2558,7 @@ function App() {
                                     )}
                                     {q.notes && (
                                       <small className="saved-note">
-                                        Note: {q.notes}
+                                       {q.notes}
                                       </small>
                                     )}
                                   </div>
