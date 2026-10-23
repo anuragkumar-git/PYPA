@@ -23,7 +23,7 @@ import {
   AlertTriangle,
   Eye,
   X,
-  Save,
+  Menu,
 } from "lucide-react";
 
 const PROGRESS_KEY = "rrb-je-pyq-progress-v1";
@@ -306,6 +306,8 @@ function App() {
   const [coverageSubject, setCoverageSubject] = useState("All");
   const [coverageTopic, setCoverageTopic] = useState("All");
   const [coverageOpen, setCoverageOpen] = useState(false);
+  // Mobile sidebar starts closed; desktop visibility is controlled by CSS.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [importMessage, setImportMessage] = useState("");
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
@@ -1172,13 +1174,27 @@ function App() {
   }
 
   function openCoverageQuestion(q) {
+    // On mobile, close the sidebar when the user navigates to a question.
+    setSidebarOpen(false);
+
     if (!isPracticeReady(q)) {
       setSessionError(
-        `${q.id} needs review: ${(q.reviewReasons || []).join("; ") || "Check its question, options, answer key, and images."}`,
+        `${q.id} needs review: ${
+          (q.reviewReasons || []).join("; ") ||
+          "Check its question, options, answer key, and images."
+        }`,
       );
-      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      // Review warnings are shown above the question panel.
+      // Scroll to the warning instead of returning to the import module.
+      requestAnimationFrame(() => {
+        document
+          .getElementById("main-content")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
       return;
     }
+
     setSessionError("");
     setCompletedSession(null);
     setSession([q]);
@@ -1186,7 +1202,14 @@ function App() {
     setSelected(null);
     setChecked(false);
     setSessionResults({});
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    // Scroll directly to the question panel, not the top of the page.
+    // The panel already exists in the DOM, so this target is stable.
+    requestAnimationFrame(() => {
+      document
+        .getElementById("quiz-panel")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   const attemptedQuestions = bank.filter(
@@ -1342,7 +1365,23 @@ function App() {
       </header>
 
       <main className="layout">
-        <aside className="sidebar panel">
+        {/* Mobile-only toggle; hidden on desktop by index.css. */}
+        <button
+          type="button"
+          className="button outline sidebar-toggle"
+          onClick={() => setSidebarOpen((open) => !open)}
+          aria-expanded={sidebarOpen}
+          aria-controls="app-sidebar"
+        >
+          {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
+          {sidebarOpen ? "Hide sidebar" : "Import / Practice menu"}
+        </button>
+
+        {/* Desktop sidebar remains visible; mobile visibility follows sidebarOpen. */}
+        <aside
+          id="app-sidebar"
+          className={`sidebar panel ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}
+        >
           <h2>Import question bank</h2>
           <p className="section-subtitle">
             Start empty. Import one JSON question array or a ZIP containing
@@ -1551,7 +1590,8 @@ function App() {
           </p>
         </aside>
 
-        <section className="main-column">
+        {/* Target for scrolling to question-review warnings. */}
+        <section className="main-column" id="main-content">
           {sessionError && (
             <div className="alert" role="status">
               <AlertTriangle size={16} />
@@ -1565,7 +1605,8 @@ function App() {
               </button>
             </div>
           )}
-          <section className="panel quiz-panel">
+          {/* Target for scrolling directly to the opened question. */}
+          <section className="panel quiz-panel" id="quiz-panel">  
             {!current ? (
               completedSession ? (
                 <div className="completion">

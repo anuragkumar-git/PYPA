@@ -896,3 +896,41 @@ footer {
   margin-top: 0.25rem;
   flex-shrink: 0;
 }
+
+/* Desktop: keep the existing always-visible sidebar and hide its toggle. */
+.sidebar-toggle {
+  display: none;
+}
+
+/* Helps scrollIntoView leave a little breathing room above the target. */
+#main-content,
+#quiz-panel {
+  scroll-margin-top: 14px;
+}
+
+@media (max-width: 820px) {
+  /* Show the toggle above the main content on small screens. */
+  .sidebar-toggle {
+    display: inline-flex;
+    grid-column: 1 / -1;
+    justify-self: start;
+    white-space: normal;
+  }
+
+  /* The mobile sidebar is hidden until the user opens it. */
+  .sidebar-closed {
+    display: none;
+  }
+
+  /* Show the complete import and practice controls when expanded. */
+  .sidebar-open {
+    display: block;
+    width: 100%;
+  }
+
+  /* Prevent the question area from sitting underneath browser UI. */
+  #main-content,
+  #quiz-panel {
+    scroll-margin-top: 10px;
+  }
+}
