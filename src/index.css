@@ -263,12 +263,12 @@ textarea {
   background: #edf8f3;
 }
 .option.correct {
-  border-color: #229253;
-  background: #eaf8ee;
+  border-color: #3bfa8e;
+  background: #c5f9d3cd;
 }
 .option.incorrect {
-  border-color: #d84c4c;
-  background: #fff0f0;
+  border-color: #ef1616;
+  background: #fff4f0;
 }
 .option-label {
   display: grid;

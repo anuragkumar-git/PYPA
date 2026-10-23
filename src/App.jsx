@@ -1741,6 +1741,7 @@ function App() {
                             current.options[current.correctAnswerIndex]
                         : "Answer key unavailable"}
                     </span>
+                    {current.notes && <small>NOTE: {current.notes}</small>}
                     {current.answerValidation === "source-key-unverified" && (
                       <small>
                         Answer key has not been independently verified.
@@ -2453,11 +2454,21 @@ function App() {
                                         `Question text missing — ${q.id}`
                                       )
                                         .replace(/\s+/g, " ")
-                                        .slice(0, 170)}
+                                        .slice(0, 450)}
                                       {(q.question || "").length > 170
                                         ? "…"
                                         : ""}
                                     </strong>
+                                    {q.questionImage && (
+                                      <div className="source-image-wrap">
+                                        {renderImage(
+                                          q.questionImage,
+                                          `Question ${q.questionNumber}`,
+                                          "question-image",
+                                          q.paperId,
+                                        )}
+                                      </div>
+                                    )}
                                     <small>
                                       {q.subject || "Unclassified"} ·{" "}
                                       {q.topic || "Unclassified"}
@@ -2504,11 +2515,6 @@ function App() {
                                         {q.reviewReasons.join("; ")}
                                       </small>
                                     )}
-                                    {/* {state.note && (
-                                      <small className="saved-note">
-                                        Note: {state.note}
-                                      </small>
-                                    )} */}
                                     {q.notes && (
                                       <small className="saved-note">
                                         Note: {q.notes}
