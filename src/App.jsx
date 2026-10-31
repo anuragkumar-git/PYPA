@@ -111,7 +111,7 @@ function createManualQuestionDraft(questionNumber) {
     questionImageFile: null,
     optionImageFiles: {},
     note: "",
-    verified: false,
+    verified: true,
   };
 }
 
@@ -1474,7 +1474,12 @@ function App() {
           getNextManualQuestionNumber(updatedQuestions, manualEntryPaperId),
         ),
       );
-
+      requestAnimationFrame(() => {
+        document.getElementById("manual-question-builder")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
       setDbMessage(
         `${questionId} saved. You can add the next question or finish paper entry.`,
       );
