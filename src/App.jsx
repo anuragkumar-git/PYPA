@@ -7,6 +7,7 @@ import {
   saveQuestionWithImages,
   deletePaper,
   getImageBlob,
+  addCategory,
 } from "./db";
 import {
   Download,
@@ -24,6 +25,9 @@ import {
   Eye,
   X,
   Menu,
+  Plus,
+  Tags,
+  Save,
 } from "lucide-react";
 
 const PROGRESS_KEY = "rrb-je-pyq-progress-v1";
@@ -74,6 +78,52 @@ function normalizePath(value) {
     .replace(/^\.\/+/, "")
     .replace(/^\/+/, "");
 }
+// Generate a predictable question ID from the paper ID and question number.
+function makeManualQuestionId(paperId, questionNumber) {
+  return `${paperId}-Q${String(questionNumber).padStart(3, "0")}`;
+}
+
+// Find the next unused question number in a paper.
+function getNextManualQuestionNumber(bank, paperId) {
+  const paperQuestions = bank.filter((q) => q.paperId === paperId);
+
+  const usedNumbers = paperQuestions.map((q) => q.questionNumber);
+
+  let nextNumber = Math.max(0, ...usedNumbers) + 1;
+
+  // Protect against an unusual existing question ID collision.
+  while (bank.some((q) => q.id === makeManualQuestionId(paperId, nextNumber))) {
+    nextNumber++;
+  }
+
+  return nextNumber;
+}
+
+// Default state for each newly created question.
+function createManualQuestionDraft(questionNumber) {
+  return {
+    questionNumber,
+    question: "",
+    subject: "",
+    topic: "",
+    options: ["", "", "", ""],
+    correctAnswerIndex: "",
+    questionImageFile: null,
+    optionImageFiles: {},
+    note: "",
+    verified: false,
+  };
+}
+
+// Keep uploaded images inside a question-specific directory.
+// This avoids filename collisions between questions.
+function makeManualImagePath(questionId, slot, file) {
+  const safeId = questionId.replace(/[^a-zA-Z0-9_-]+/g, "-");
+  const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+
+  return `images/${safeId}/${slot}-${safeFilename}`;
+}
+
 function isPracticeReady(q) {
   return (
     q.practiceReady === true &&
@@ -315,23 +365,63 @@ function App() {
   const [dbMessage, setDbMessage] = useState("");
   const [imageUrls, setImageUrls] = useState({});
   const [editImagePreviewUrls, setEditImagePreviewUrls] = useState({});
+  // Paper metadata is stored separately from questions.
+  // This allows a paper with zero questions to appear in coverage.
+  const [paperRecords, setPaperRecords] = useState([]);
+
+  // Master subject/topic list stored in IndexedDB.
+  const [categoryRecords, setCategoryRecords] = useState([]);
+
+  // Add-paper workflow.
+  const [manualPaperOpen, setManualPaperOpen] = useState(false);
+  const [paperForm, setPaperForm] = useState({
+    id: "",
+    date: "",
+    shift: "",
+    paperFile: "",
+  });
+
+  // Add-question workflow.
+  const [manualEntryOpen, setManualEntryOpen] = useState(false);
+  const [manualEntryPaperId, setManualEntryPaperId] = useState("");
+  const [manualQuestionDraft, setManualQuestionDraft] = useState(null);
+  const [manualImagePreviewUrls, setManualImagePreviewUrls] = useState({});
+
+  // Subject/topic manager.
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  const [subjectNameDraft, setSubjectNameDraft] = useState("");
+  const [topicNameDraft, setTopicNameDraft] = useState("");
+  const [taxonomySubject, setTaxonomySubject] = useState("");
 
   // CHANGED: fresh installs start empty; initializeDatabase no longer fetches public/questions.json.
   useEffect(() => {
     let cancelled = false;
+
     initializeDatabase()
-      .then((questions) => {
+      .then(async (questions) => {
+        const [savedPapers, savedCategories] = await Promise.all([
+          db.papers.toArray(),
+          db.categories.toArray(),
+        ]);
+
         if (cancelled) return;
+
         setBank(questions);
-        setCoveragePaper(questions[0]?.paperId || "");
-        // Reset coverage filters after importing a new set of questions.
+        setPaperRecords(savedPapers);
+        setCategoryRecords(savedCategories);
+
+        // A manually created empty paper may be the only paper in the database.
+        setCoveragePaper(questions[0]?.paperId || savedPapers[0]?.id || "");
+
         setCoverageSubject("All");
         setCoverageTopic("All");
       })
       .catch((error) => {
-        if (!cancelled)
+        if (!cancelled) {
           setLoadError(error.message || "Could not initialize local database.");
+        }
       });
+
     return () => {
       cancelled = true;
     };
@@ -396,6 +486,34 @@ function App() {
     return () => Object.values(next).forEach((url) => URL.revokeObjectURL(url));
   }, [editDraft?.questionImageFile, editDraft?.optionImageFiles]);
 
+  // Temporary image previews for manually added questions.
+  useEffect(() => {
+    const next = {};
+
+    if (manualQuestionDraft?.questionImageFile) {
+      next.question = URL.createObjectURL(
+        manualQuestionDraft.questionImageFile,
+      );
+    }
+
+    Object.entries(manualQuestionDraft?.optionImageFiles || {}).forEach(
+      ([index, file]) => {
+        if (file) {
+          next[`option-${index}`] = URL.createObjectURL(file);
+        }
+      },
+    );
+
+    setManualImagePreviewUrls(next);
+
+    return () => {
+      Object.values(next).forEach(URL.revokeObjectURL);
+    };
+  }, [
+    manualQuestionDraft?.questionImageFile,
+    manualQuestionDraft?.optionImageFiles,
+  ]);
+
   useEffect(() => {
     try {
       localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
@@ -411,14 +529,36 @@ function App() {
     [imageUrls],
   );
 
+  // Subjects can come from existing questions or the category manager.
   const subjects = useMemo(
-    () => [...new Set(bank.map((q) => q.subject).filter(Boolean))].sort(),
-    [bank],
+    () =>
+      [
+        ...new Set([
+          ...bank.map((q) => q.subject),
+          ...categoryRecords
+            .filter((item) => item.type === "subject")
+            .map((item) => item.name),
+        ]),
+      ]
+        .filter(Boolean)
+        .sort(),
+    [bank, categoryRecords],
   );
+
+  // Include empty papers as well as papers containing questions.
   const papers = useMemo(
-    () => [...new Set(bank.map((q) => q.paperId).filter(Boolean))].sort(),
-    [bank],
+    () =>
+      [
+        ...new Set([
+          ...bank.map((q) => q.paperId),
+          ...paperRecords.map((p) => p.id),
+        ]),
+      ]
+        .filter(Boolean)
+        .sort(),
+    [bank, paperRecords],
   );
+
   const availableTopics = useMemo(() => {
     const list = bank.filter(
       (q) =>
@@ -468,13 +608,42 @@ function App() {
   const current = session[idx] || null;
   const currentState = current ? getState(progress, current) : null;
   const editTopics = [
-    ...new Set(
-      bank
+    ...new Set([
+      ...bank
         .filter((q) => q.subject === editDraft?.subject)
-        .map((q) => q.topic)
-        .filter(Boolean),
-    ),
-  ].sort();
+        .map((q) => q.topic),
+
+      ...categoryRecords
+        .filter(
+          (item) =>
+            item.type === "topic" && item.parentId === editDraft?.subject,
+        )
+        .map((item) => item.name),
+    ]),
+  ]
+    .filter(Boolean)
+    .sort();
+
+  // Topics available for the currently selected subject in the new-question form.
+  const manualTopicOptions = manualQuestionDraft?.subject
+    ? [
+        ...new Set([
+          ...bank
+            .filter((q) => q.subject === manualQuestionDraft.subject)
+            .map((q) => q.topic),
+
+          ...categoryRecords
+            .filter(
+              (item) =>
+                item.type === "topic" &&
+                item.parentId === manualQuestionDraft.subject,
+            )
+            .map((item) => item.name),
+        ]),
+      ]
+        .filter(Boolean)
+        .sort()
+    : [];
 
   useEffect(() => {
     setNoteDraft(currentState?.note || current?.notes || "");
@@ -904,6 +1073,13 @@ function App() {
       // CHANGED: the DB layer commits questions, papers, and images atomically; failures preserve the old bank.
       await importQuestionBank(questions, imageEntries);
       const updated = await db.questions.orderBy("paperId").toArray();
+      const [updatedPapers, updatedCategories] = await Promise.all([
+        db.papers.toArray(),
+        db.categories.toArray(),
+      ]);
+
+      setPaperRecords(updatedPapers);
+      setCategoryRecords(updatedCategories);
       setBank(updated);
       setCoveragePaper(questions[0]?.paperId || "");
       setCoverageStatus("All");
@@ -918,6 +1094,394 @@ function App() {
     } finally {
       setDbBusy(false);
       event.target.value = "";
+    }
+  }
+
+  // Open the question form for an existing paper.
+  // Question numbering continues from the highest existing number.
+  function startManualQuestionEntry(paperId) {
+    if (!paperId) return;
+
+    setCoveragePaper(paperId);
+    setCoverageSubject("All");
+    setCoverageTopic("All");
+    setCoverageStatus("All");
+    setCoverageOpen(true);
+
+    setManualEntryPaperId(paperId);
+    setManualQuestionDraft(
+      createManualQuestionDraft(getNextManualQuestionNumber(bank, paperId)),
+    );
+
+    setManualPaperOpen(false);
+    setManualEntryOpen(true);
+
+    // Avoid having the edit form and add form open at the same time.
+    setEditingQuestionId(null);
+    setEditDraft(null);
+    // Scroll to the newly opened question form.
+    // Wait for React to render it before looking up the target.
+    requestAnimationFrame(() => {
+      document.getElementById("manual-question-builder")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
+  // Create and persist paper metadata before adding its first question.
+  async function handleCreateManualPaper() {
+    const paperId = paperForm.id.trim();
+
+    if (!paperId) {
+      setDbMessage("Enter a paper ID.");
+      return;
+    }
+
+    // Restrict IDs so generated question IDs and image paths remain predictable.
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(paperId)) {
+      setDbMessage(
+        "Paper ID must start with a letter or number and contain only letters, numbers, hyphens, or underscores.",
+      );
+      return;
+    }
+
+    const duplicate = papers.some(
+      (id) => id.toLowerCase() === paperId.toLowerCase(),
+    );
+
+    if (duplicate) {
+      setDbMessage(`Paper "${paperId}" already exists.`);
+      return;
+    }
+
+    setDbBusy(true);
+    setDbMessage("");
+
+    try {
+      const record = {
+        id: paperId,
+        date: paperForm.date || "",
+        shift: paperForm.shift.trim(),
+        paperFile: paperForm.paperFile.trim(),
+        questionCount: 0,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Persist the paper immediately, even though it has zero questions.
+      await db.papers.add(record);
+
+      const updatedPapers = await db.papers.toArray();
+      setPaperRecords(updatedPapers);
+
+      setCoveragePaper(paperId);
+      setCoverageSubject("All");
+      setCoverageTopic("All");
+      setCoverageStatus("All");
+      setCoverageSearch("");
+      setCoverageOpen(true);
+
+      setManualEntryPaperId(paperId);
+      setManualQuestionDraft(
+        createManualQuestionDraft(getNextManualQuestionNumber(bank, paperId)),
+      );
+
+      setManualPaperOpen(false);
+      setManualEntryOpen(true);
+      // Scroll to the first question form after the paper is created.
+      requestAnimationFrame(() => {
+        document.getElementById("manual-question-builder")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+
+      setDbMessage(
+        `Paper "${paperId}" created. You can now add its questions.`,
+      );
+    } catch (error) {
+      setDbMessage(error.message || "Could not create the paper.");
+    } finally {
+      setDbBusy(false);
+    }
+  }
+
+  // Add a new subject through the category manager.
+  // Question forms themselves never allow free-text subject names.
+  async function handleAddSubject() {
+    if (!subjectNameDraft.trim()) {
+      setDbMessage("Enter a subject name.");
+      return;
+    }
+
+    setDbBusy(true);
+
+    try {
+      const result = await addCategory("subject", subjectNameDraft);
+      const updatedCategories = await db.categories.toArray();
+
+      setCategoryRecords(updatedCategories);
+      setTaxonomySubject(result.category.name);
+      setSubjectNameDraft("");
+
+      // Select the new subject in the currently open question form.
+      setManualQuestionDraft((previous) =>
+        previous
+          ? {
+              ...previous,
+              subject: result.category.name,
+              topic: "",
+            }
+          : previous,
+      );
+
+      setDbMessage(
+        result.created
+          ? `Subject "${result.category.name}" added.`
+          : `Subject "${result.category.name}" already exists.`,
+      );
+    } catch (error) {
+      setDbMessage(error.message || "Could not add the subject.");
+    } finally {
+      setDbBusy(false);
+    }
+  }
+
+  // Add a topic under exactly one selected subject.
+  async function handleAddTopic() {
+    if (!taxonomySubject) {
+      setDbMessage("Select a subject before adding a topic.");
+      return;
+    }
+
+    if (!topicNameDraft.trim()) {
+      setDbMessage("Enter a topic name.");
+      return;
+    }
+
+    setDbBusy(true);
+
+    try {
+      const result = await addCategory(
+        "topic",
+        topicNameDraft,
+        taxonomySubject,
+      );
+
+      const updatedCategories = await db.categories.toArray();
+      setCategoryRecords(updatedCategories);
+      setTopicNameDraft("");
+
+      // When the manager is opened from a question form,
+      // automatically select the newly added topic if it belongs to that subject.
+      setManualQuestionDraft((previous) =>
+        previous && previous.subject === taxonomySubject
+          ? {
+              ...previous,
+              topic: result.category.name,
+            }
+          : previous,
+      );
+
+      setDbMessage(
+        result.created
+          ? `Topic "${result.category.name}" added under ${taxonomySubject}.`
+          : `Topic "${result.category.name}" already exists under ${taxonomySubject}.`,
+      );
+    } catch (error) {
+      setDbMessage(error.message || "Could not add the topic.");
+    } finally {
+      setDbBusy(false);
+    }
+  }
+
+  // Save one question, then prepare the next question automatically.
+  async function handleSaveManualQuestion() {
+    if (!manualQuestionDraft || !manualEntryPaperId) return;
+
+    const draft = manualQuestionDraft;
+    const questionNumber = draft.questionNumber;
+    const questionId = makeManualQuestionId(manualEntryPaperId, questionNumber);
+
+    setDbBusy(true);
+    setDbMessage("");
+
+    try {
+      const paperMeta =
+        paperRecords.find((paper) => paper.id === manualEntryPaperId) || {};
+
+      if (!draft.question.trim()) {
+        throw new Error("Enter the question text.");
+      }
+
+      if (!draft.subject || !subjects.includes(draft.subject)) {
+        throw new Error("Select a valid subject.");
+      }
+
+      if (draft.topic && !manualTopicOptions.includes(draft.topic)) {
+        throw new Error("Select a topic belonging to the selected subject.");
+      }
+
+      const answerIndex =
+        draft.correctAnswerIndex === ""
+          ? null
+          : Number(draft.correctAnswerIndex);
+
+      if (
+        !Number.isInteger(answerIndex) ||
+        answerIndex < 0 ||
+        answerIndex > 3
+      ) {
+        throw new Error("Select the correct answer.");
+      }
+
+      const options = [...draft.options].slice(0, 4);
+      while (options.length < 4) options.push("");
+
+      const imageEntries = [];
+
+      // Optional question image.
+      let questionImage = null;
+
+      if (draft.questionImageFile) {
+        const file = draft.questionImageFile;
+
+        if (!isImagePath(file.name)) {
+          throw new Error("Select a supported question image file.");
+        }
+
+        questionImage = makeManualImagePath(questionId, "question", file);
+
+        imageEntries.push({
+          path: questionImage,
+          blob: file,
+        });
+      }
+
+      // Optional image for each answer option.
+      for (let i = 0; i < 4; i++) {
+        const file = draft.optionImageFiles[i];
+
+        if (!file) continue;
+
+        if (!isImagePath(file.name)) {
+          throw new Error(`Select a supported image for option ${LABELS[i]}.`);
+        }
+
+        const path = makeManualImagePath(
+          questionId,
+          `option-${LABELS[i].toLowerCase()}`,
+          file,
+        );
+
+        // An image option is stored as its image path in the options array.
+        options[i] = path;
+
+        imageEntries.push({
+          path,
+          blob: file,
+        });
+      }
+
+      if (options.some((option) => !String(option || "").trim())) {
+        throw new Error("Enter text or attach an image for all four options.");
+      }
+
+      // Check both kinds of uniqueness before saving.
+      if (await db.questions.get(questionId)) {
+        throw new Error(`Question ID "${questionId}" already exists.`);
+      }
+
+      const duplicateNumber = await db.questions
+        .where("paperId")
+        .equals(manualEntryPaperId)
+        .filter((question) => question.questionNumber === questionNumber)
+        .first();
+
+      if (duplicateNumber) {
+        throw new Error(
+          `Question number ${questionNumber} already exists in this paper.`,
+        );
+      }
+
+      const candidate = {
+        id: questionId,
+        paperId: manualEntryPaperId,
+        paperFile: paperMeta.paperFile || "",
+        date: paperMeta.date || "",
+        shift: paperMeta.shift || "",
+        questionNumber,
+
+        subject: draft.subject,
+        topic: draft.topic || "",
+
+        question: draft.question.trim(),
+        questionImage,
+        questionImageNotRequired: !questionImage,
+
+        options,
+        correctAnswerIndex: answerIndex,
+        correctAnswer: options[answerIndex],
+
+        answerValidation: draft.verified
+          ? "source-key-verified"
+          : "source-key-unverified",
+
+        notes: draft.note.trim(),
+
+        visualReviewNeeded: false,
+        practiceReady: true,
+        reviewReasons: [],
+      };
+
+      // The normalizer checks that every referenced image has a corresponding
+      // uploaded image entry before marking the question practice-ready.
+      const archivePaths = new Set(
+        imageEntries.map((item) => normalizePath(item.path)),
+      );
+
+      const normalized = normalizeQuestion(candidate, 0, archivePaths);
+
+      if (!isPracticeReady(normalized)) {
+        throw new Error(
+          normalized.reviewReasons.join("; ") ||
+            "The question is incomplete and cannot be saved as practice-ready.",
+        );
+      }
+
+      // Question data and image Blobs are saved through the existing DB helper.
+      await saveQuestionWithImages(normalized, imageEntries);
+
+      const [updatedQuestions, updatedPapers, updatedCategories] =
+        await Promise.all([
+          db.questions.orderBy("paperId").toArray(),
+          db.papers.toArray(),
+          db.categories.toArray(),
+        ]);
+
+      setBank(updatedQuestions);
+      setPaperRecords(updatedPapers);
+      setCategoryRecords(updatedCategories);
+
+      setCoveragePaper(manualEntryPaperId);
+      setCoverageOpen(true);
+      setCoverageStatus("All");
+      setCoverageSearch("");
+
+      // Automatically prepare the next sequential question.
+      setManualQuestionDraft(
+        createManualQuestionDraft(
+          getNextManualQuestionNumber(updatedQuestions, manualEntryPaperId),
+        ),
+      );
+
+      setDbMessage(
+        `${questionId} saved. You can add the next question or finish paper entry.`,
+      );
+    } catch (error) {
+      setDbMessage(error.message || "Could not save the question.");
+    } finally {
+      setDbBusy(false);
     }
   }
 
@@ -1153,6 +1717,14 @@ function App() {
       );
       await deletePaper(paperId);
       const updated = await db.questions.orderBy("paperId").toArray();
+      setPaperRecords(await db.papers.toArray());
+
+      // Close the manual entry form if its paper was deleted.
+      if (manualEntryPaperId === paperId) {
+        setManualEntryPaperId("");
+        setManualQuestionDraft(null);
+        setManualEntryOpen(false);
+      }
       setBank(updated);
       setProgress((prev) => {
         const next = { ...prev };
@@ -1317,15 +1889,21 @@ function App() {
     () =>
       papers.map((id) => {
         const qs = bank.filter((q) => q.paperId === id);
+        const metadata = paperRecords.find((paper) => paper.id === id);
+
         return {
           id,
           total: qs.length,
           covered: qs.filter((q) => getState(progress, q).attempts.length > 0)
             .length,
           ready: qs.filter(isPracticeReady).length,
+
+          date: metadata?.date || "",
+          shift: metadata?.shift || "",
+          paperFile: metadata?.paperFile || "",
         };
       }),
-    [papers, bank, progress],
+    [papers, bank, progress, paperRecords],
   );
 
   function renderImage(path, alt, className, paperId) {
@@ -1848,25 +2426,597 @@ function App() {
               <div>
                 <h2>Paper-wise coverage</h2>
                 <p className="section-subtitle">
-                  Incomplete records are retained and flagged; only
-                  practice-ready questions enter sessions.
+                  Add papers and questions manually, or import an existing
+                  question bank. Incomplete questions remain available for
+                  review.
                 </p>
               </div>
-              <button
-                className="button ghost"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Reset all saved attempts, review marks, and notes?",
-                    )
-                  )
-                    setProgress({});
-                }}
-                disabled={!bank.length}
-              >
-                <RotateCcw size={14} /> Reset progress
-              </button>
+
+              <div className="coverage-actions">
+                <button
+                  className="button primary"
+                  disabled={dbBusy}
+                  onClick={() => {
+                    setPaperForm({
+                      id: "",
+                      date: "",
+                      shift: "",
+                      paperFile: "",
+                    });
+                    setManualPaperOpen((open) => !open);
+                    setManualEntryOpen(false);
+                  }}
+                >
+                  <Plus size={14} /> Add paper
+                </button>
+
+                <button
+                  className="button outline"
+                  disabled={dbBusy}
+                  onClick={() => {
+                    setTaxonomySubject(
+                      manualQuestionDraft?.subject || subjects[0] || "",
+                    );
+                    setCategoryManagerOpen((open) => !open);
+                  }}
+                >
+                  <Tags size={14} /> Manage subjects & topics
+                </button>
+
+                <button
+                  className="button ghost"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Reset all saved attempts, review marks, and notes?",
+                      )
+                    ) {
+                      setProgress({});
+                    }
+                  }}
+                  disabled={!bank.length}
+                >
+                  <RotateCcw size={14} /> Reset progress
+                </button>
+              </div>
             </div>
+            {manualPaperOpen && (
+              <div className="manual-builder">
+                <div className="manual-builder-heading">
+                  <div>
+                    <h3>Create a new paper</h3>
+                    <p>
+                      Enter the paper details first. You will add its questions
+                      individually after creating it.
+                    </p>
+                  </div>
+
+                  <button
+                    className="icon-button"
+                    onClick={() => setManualPaperOpen(false)}
+                    aria-label="Close paper form"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+
+                <div className="manual-form-grid">
+                  <label>
+                    Paper ID <span className="required-mark">*</span>
+                    <input
+                      type="text"
+                      value={paperForm.id}
+                      onChange={(e) =>
+                        setPaperForm((p) => ({
+                          ...p,
+                          id: e.target.value,
+                        }))
+                      }
+                      placeholder="RRB-JE-2024-S1"
+                      maxLength={80}
+                    />
+                    <small>
+                      Use letters, numbers, hyphens, or underscores.
+                    </small>
+                  </label>
+
+                  <label>
+                    Exam date
+                    <input
+                      type="date"
+                      value={paperForm.date}
+                      onChange={(e) =>
+                        setPaperForm((p) => ({
+                          ...p,
+                          date: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Shift
+                    <input
+                      type="text"
+                      value={paperForm.shift}
+                      onChange={(e) =>
+                        setPaperForm((p) => ({
+                          ...p,
+                          shift: e.target.value,
+                        }))
+                      }
+                      placeholder="Shift 1 / 09:00–10:30"
+                    />
+                  </label>
+
+                  <label>
+                    Source PDF filename
+                    <input
+                      type="text"
+                      value={paperForm.paperFile}
+                      onChange={(e) =>
+                        setPaperForm((p) => ({
+                          ...p,
+                          paperFile: e.target.value,
+                        }))
+                      }
+                      placeholder="rrb-je-2024-shift-1.pdf"
+                    />
+                  </label>
+                </div>
+
+                <div className="button-row manual-action-row">
+                  <button
+                    className="button primary"
+                    onClick={handleCreateManualPaper}
+                    disabled={dbBusy}
+                  >
+                    <Plus size={15} /> Create paper & add questions
+                  </button>
+
+                  <button
+                    className="button outline"
+                    onClick={() => setManualPaperOpen(false)}
+                    disabled={dbBusy}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {categoryManagerOpen && (
+              <div className="category-manager">
+                <div className="manual-builder-heading">
+                  <div>
+                    <h3>Manage subjects & topics</h3>
+                    <p>
+                      Create categories here. Question entry uses dropdowns, so
+                      you cannot accidentally create duplicate categories by
+                      typing.
+                    </p>
+                  </div>
+
+                  <button
+                    className="icon-button"
+                    onClick={() => setCategoryManagerOpen(false)}
+                    aria-label="Close category manager"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+
+                <div className="category-manager-grid">
+                  <div className="category-manager-card">
+                    <h4>Subjects</h4>
+
+                    <label>
+                      New subject name
+                      <input
+                        type="text"
+                        value={subjectNameDraft}
+                        onChange={(e) => setSubjectNameDraft(e.target.value)}
+                        placeholder="e.g. General Awareness"
+                      />
+                    </label>
+
+                    <button
+                      className="button primary"
+                      onClick={handleAddSubject}
+                      disabled={dbBusy || !subjectNameDraft.trim()}
+                    >
+                      <Plus size={14} /> Add subject
+                    </button>
+                  </div>
+
+                  <div className="category-manager-card">
+                    <h4>Topics</h4>
+
+                    <label>
+                      Select parent subject
+                      <select
+                        value={taxonomySubject}
+                        onChange={(e) => setTaxonomySubject(e.target.value)}
+                      >
+                        <option value="">Select subject</option>
+
+                        {subjects.map((value) => (
+                          <option key={value} value={value}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      New topic name
+                      <input
+                        type="text"
+                        value={topicNameDraft}
+                        onChange={(e) => setTopicNameDraft(e.target.value)}
+                        placeholder="e.g. Percentage"
+                      />
+                    </label>
+
+                    <button
+                      className="button primary"
+                      onClick={handleAddTopic}
+                      disabled={
+                        dbBusy || !taxonomySubject || !topicNameDraft.trim()
+                      }
+                    >
+                      <Plus size={14} /> Add topic to subject
+                    </button>
+
+                    {taxonomySubject && (
+                      <p className="category-parent-hint">
+                        This topic will belong to{" "}
+                        <strong>{taxonomySubject}</strong>.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {manualEntryOpen && manualQuestionDraft && (
+              <div
+                className="manual-builder manual-question-builder"
+                id="manual-question-builder"
+              >
+                <div className="manual-builder-heading">
+                  <div>
+                    <h3>
+                      Add question · {manualEntryPaperId} · Q
+                      {manualQuestionDraft.questionNumber}
+                    </h3>
+
+                    <p>
+                      Question ID:{" "}
+                      <strong>
+                        {makeManualQuestionId(
+                          manualEntryPaperId,
+                          manualQuestionDraft.questionNumber,
+                        )}
+                      </strong>
+                      {" · "}
+                      Question numbers are generated automatically.
+                    </p>
+                  </div>
+
+                  <button
+                    className="icon-button"
+                    onClick={() => {
+                      setManualEntryOpen(false);
+                      setManualQuestionDraft(null);
+                    }}
+                    aria-label="Finish adding questions"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+
+                {/* Subject and topic are dropdowns, not free-text inputs. */}
+                <div className="manual-form-grid">
+                  <label>
+                    Subject <span className="required-mark">*</span>
+                    <select
+                      required
+                      value={manualQuestionDraft.subject}
+                      onChange={(e) =>
+                        setManualQuestionDraft((p) => ({
+                          ...p,
+                          subject: e.target.value,
+                          topic: "",
+                        }))
+                      }
+                    >
+                      <option value="">Select subject</option>
+
+                      {subjects.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Topic
+                    <select
+                      value={manualQuestionDraft.topic}
+                      disabled={!manualQuestionDraft.subject}
+                      onChange={(e) =>
+                        setManualQuestionDraft((p) => ({
+                          ...p,
+                          topic: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">No topic / not classified</option>
+
+                      {manualTopicOptions.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  className="button outline manual-manage-categories"
+                  onClick={() => {
+                    setTaxonomySubject(
+                      manualQuestionDraft.subject || subjects[0] || "",
+                    );
+                    setCategoryManagerOpen((open) => !open);
+                  }}
+                >
+                  <Tags size={14} /> Add or manage categories
+                </button>
+
+                <label className="manual-field">
+                  Question text <span className="required-mark">*</span>
+                  <textarea
+                    rows={4}
+                    value={manualQuestionDraft.question}
+                    onChange={(e) =>
+                      setManualQuestionDraft((p) => ({
+                        ...p,
+                        question: e.target.value,
+                      }))
+                    }
+                    placeholder="Enter the complete question..."
+                  />
+                </label>
+
+                {/* Optional question image. The file is stored in IndexedDB, not as a URL. */}
+                <div className="manual-image-field">
+                  <label>
+                    Question image{" "}
+                    <span className="edit-image-hint">(optional)</span>
+                    <input
+                      id="manual-question-image"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
+                      onChange={(e) =>
+                        setManualQuestionDraft((p) => ({
+                          ...p,
+                          questionImageFile: e.target.files?.[0] || null,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  {manualQuestionDraft.questionImageFile && (
+                    <div className="manual-selected-image">
+                      {manualImagePreviewUrls.question && (
+                        <img
+                          className="manual-image-preview"
+                          src={manualImagePreviewUrls.question}
+                          alt="Question image preview"
+                        />
+                      )}
+
+                      <small>
+                        Selected: {manualQuestionDraft.questionImageFile.name}
+                      </small>
+
+                      <button
+                        type="button"
+                        className="button ghost"
+                        onClick={() => {
+                          setManualQuestionDraft((p) => ({
+                            ...p,
+                            questionImageFile: null,
+                          }));
+
+                          const input = document.getElementById(
+                            "manual-question-image",
+                          );
+
+                          if (input) input.value = "";
+                        }}
+                      >
+                        Remove image
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <h4 className="manual-subheading">
+                  Answer options <span className="required-mark">*</span>
+                </h4>
+
+                <div className="manual-options-grid">
+                  {manualQuestionDraft.options.map((option, index) => {
+                    const file = manualQuestionDraft.optionImageFiles[index];
+
+                    return (
+                      <div className="manual-option-card" key={index}>
+                        <label>
+                          Option {LABELS[index]}
+                          <input
+                            type="text"
+                            value={file ? "" : option}
+                            disabled={Boolean(file)}
+                            onChange={(e) =>
+                              setManualQuestionDraft((p) => ({
+                                ...p,
+                                options: p.options.map((value, i) =>
+                                  i === index ? e.target.value : value,
+                                ),
+                              }))
+                            }
+                            placeholder={
+                              file
+                                ? "Image selected"
+                                : `Enter option ${LABELS[index]}`
+                            }
+                          />
+                        </label>
+
+                        <label>
+                          Or attach an option image
+                          <input
+                            id={`manual-option-image-${index}`}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
+                            onChange={(e) => {
+                              const selectedFile = e.target.files?.[0] || null;
+
+                              setManualQuestionDraft((p) => ({
+                                ...p,
+                                optionImageFiles: {
+                                  ...p.optionImageFiles,
+                                  [index]: selectedFile,
+                                },
+                              }));
+                            }}
+                          />
+                        </label>
+
+                        {file && (
+                          <div className="manual-selected-image">
+                            {manualImagePreviewUrls[`option-${index}`] && (
+                              <img
+                                className="manual-image-preview"
+                                src={manualImagePreviewUrls[`option-${index}`]}
+                                alt={`Option ${LABELS[index]} preview`}
+                              />
+                            )}
+
+                            <small>Selected: {file.name}</small>
+
+                            <button
+                              type="button"
+                              className="button ghost"
+                              onClick={() => {
+                                setManualQuestionDraft((p) => ({
+                                  ...p,
+                                  optionImageFiles: {
+                                    ...p.optionImageFiles,
+                                    [index]: null,
+                                  },
+                                }));
+
+                                const input = document.getElementById(
+                                  `manual-option-image-${index}`,
+                                );
+
+                                if (input) input.value = "";
+                              }}
+                            >
+                              Remove image / switch to text
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="manual-form-grid">
+                  <label>
+                    Correct answer <span className="required-mark">*</span>
+                    <select
+                      required
+                      value={manualQuestionDraft.correctAnswerIndex}
+                      onChange={(e) =>
+                        setManualQuestionDraft((p) => ({
+                          ...p,
+                          correctAnswerIndex: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Select correct answer</option>
+
+                      {LABELS.map((label, index) => (
+                        <option key={label} value={index}>
+                          Option {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Memory trick / explanation
+                    <textarea
+                      rows={3}
+                      value={manualQuestionDraft.note}
+                      onChange={(e) =>
+                        setManualQuestionDraft((p) => ({
+                          ...p,
+                          note: e.target.value,
+                        }))
+                      }
+                      placeholder="Shortcut, mnemonic, explanation, or formula..."
+                    />
+                  </label>
+                </div>
+
+                <label className="edit-verify-row manual-verify-row">
+                  <input
+                    type="checkbox"
+                    checked={manualQuestionDraft.verified}
+                    onChange={(e) =>
+                      setManualQuestionDraft((p) => ({
+                        ...p,
+                        verified: e.target.checked,
+                      }))
+                    }
+                  />
+                  I verified the question, all four options, the correct answer,
+                  and any required images.
+                </label>
+
+                <div className="button-row manual-action-row">
+                  <button
+                    className="button primary"
+                    onClick={handleSaveManualQuestion}
+                    disabled={dbBusy}
+                  >
+                    <Save size={15} /> Save question & add next
+                  </button>
+
+                  <button
+                    className="button outline"
+                    disabled={dbBusy}
+                    onClick={() => {
+                      setManualEntryOpen(false);
+                      setManualQuestionDraft(null);
+                      setDbMessage(
+                        `Finished manual entry for ${manualEntryPaperId}. The paper and saved questions are retained.`,
+                      );
+                    }}
+                  >
+                    Finish paper entry
+                  </button>
+                </div>
+              </div>
+            )}
+
             {paperStats.length === 0 ? (
               <div className="empty-list">
                 No papers yet. Import a JSON file or ZIP to populate this
@@ -1890,9 +3040,20 @@ function App() {
                     >
                       <span className="paper-card-title">{p.id}</span>
                       <strong>
-                        {p.covered}/{p.total}
+                        {p.total ? `${p.covered}/${p.total}` : "0"}
                       </strong>
-                      <small>covered · {p.ready} practice-ready</small>
+
+                      <small>
+                        {p.total
+                          ? `${p.covered} covered · ${p.ready} practice-ready`
+                          : "No questions added yet"}
+                      </small>
+
+                      {(p.date || p.shift) && (
+                        <small>
+                          {[p.date, p.shift].filter(Boolean).join(" · ")}
+                        </small>
+                      )}
                       <span className="mini-progress">
                         <span
                           style={{
@@ -1901,13 +3062,23 @@ function App() {
                         />
                       </span>
                     </button>
-                    <button
-                      className="button delete-paper-button"
-                      disabled={dbBusy}
-                      onClick={() => handleDeletePaper(p.id)}
-                    >
-                      Delete paper
-                    </button>
+                    <div className="paper-card-actions">
+                      <button
+                        className="button outline"
+                        disabled={dbBusy}
+                        onClick={() => startManualQuestionEntry(p.id)}
+                      >
+                        <Plus size={13} /> Add questions
+                      </button>
+
+                      <button
+                        className="button delete-paper-button"
+                        disabled={dbBusy}
+                        onClick={() => handleDeletePaper(p.id)}
+                      >
+                        Delete paper
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1916,12 +3087,24 @@ function App() {
               <>
                 <div className="coverage-browser-head">
                   <h3>{coveragePaper} · Questions</h3>
-                  <button
-                    className="button ghost"
-                    onClick={() => setCoverageOpen((v) => !v)}
-                  >
-                    {coverageOpen ? "Hide list" : "Show list"} <Eye size={14} />
-                  </button>
+
+                  <div className="coverage-browser-actions">
+                    <button
+                      className="button primary"
+                      disabled={dbBusy}
+                      onClick={() => startManualQuestionEntry(coveragePaper)}
+                    >
+                      <Plus size={14} /> Add question
+                    </button>
+
+                    <button
+                      className="button ghost"
+                      onClick={() => setCoverageOpen((v) => !v)}
+                    >
+                      {coverageOpen ? "Hide list" : "Show list"}{" "}
+                      <Eye size={14} />
+                    </button>
+                  </div>
                 </div>
                 {coverageOpen && (
                   <>
@@ -2010,32 +3193,6 @@ function App() {
                                     }
                                   />
                                 </label>
-
-                                {/* <label>
-                                  Subject
-                                  <input
-                                    value={editDraft.subject}
-                                    onChange={(e) =>
-                                      setEditDraft((p) => ({
-                                        ...p,
-                                        subject: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                </label>
-
-                                <label>
-                                  Topic
-                                  <input
-                                    value={editDraft.topic}
-                                    onChange={(e) =>
-                                      setEditDraft((p) => ({
-                                        ...p,
-                                        topic: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                </label> */}
 
                                 <label>
                                   Subject
