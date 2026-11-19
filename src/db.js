@@ -208,8 +208,14 @@ export async function saveQuestionWithImages(question, imageEntries = []) {
       for (const item of paperQuestions) {
         if (item.questionImage) referenced.add(normalizeImagePath(item.questionImage));
         for (const option of item.options || []) {
-          if (typeof option === "string" && /\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i.test(option)) {
+          if (typeof option === "string" && /\.(png|jpe?g|webp|gif|svg|avif|bmp)(?:[?#].*)?$/i.test(option)) {
             referenced.add(normalizeImagePath(option));
+          }
+        }
+        // Keep optional images attached to text-bearing options in the same paper image store.
+        for (const source of item.optionImageSources || []) {
+          if (typeof source === "string" && source && !/^https?:\/\//i.test(source)) {
+            referenced.add(normalizeImagePath(source));
           }
         }
       }
@@ -311,8 +317,13 @@ export async function importQuestionBank(questions, imageEntries = []) {
             (normalizeImagePath(q.questionImage) === path ||
               (q.options || []).some(option =>
                 typeof option === "string" &&
-                /\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i.test(option) &&
+                /\.(png|jpe?g|webp|gif|svg|avif|bmp)(?:[?#].*)?$/i.test(option) &&
                 normalizeImagePath(option) === path
+              ) ||
+              (q.optionImageSources || []).some(source =>
+                typeof source === "string" &&
+                !/^https?:\/\//i.test(source) &&
+                normalizeImagePath(source) === path
               ))
           );
           if (isReferencedByPaper) {

@@ -1241,3 +1241,118 @@ footer {
 #manual-question-builder {
   scroll-margin-top: 18px;
 }
+
+/* Response-sheet details: keep the expanded question inline with the coverage list. */
+.response-url-field .button { margin-top: 9px; }
+.source-image-link { display: inline-block; max-width: 100%; }
+.question-detail-panel {
+  flex: 1 0 100%; width: 100%; min-width: 0; margin-top: 10px; padding: 14px;
+  border: 1px solid #cfe2d9; border-radius: 11px; background: #f7fbf8;
+}
+.question-detail-heading {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  color: #214d40; font: 750 13px Manrope, sans-serif;
+}
+.question-detail-stem {
+  margin: 12px 0; color: #263b34; font-size: 13px; line-height: 1.65;
+  white-space: pre-line; overflow-wrap: anywhere;
+}
+.question-detail-options { display: grid; gap: 8px; margin-top: 12px; }
+.question-detail-option {
+  display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 10px;
+  border: 1px solid #dce7e2; border-radius: 9px; background: #fff; color: #263b34;
+  font-size: 12px; line-height: 1.5;
+}
+.question-detail-option > div { flex: 1; min-width: 0; }
+.question-detail-option .option-image {
+  display: block; max-width: 100%; max-height: 220px; object-fit: contain; margin: 5px 0;
+}
+.detail-answer-tag, .detail-choice-tag {
+  flex: 0 0 auto; align-self: flex-start; padding: 4px 6px; border-radius: 5px;
+  background: #e5f6eb; color: #21683a; font-size: 9px; font-weight: 750;
+}
+.detail-choice-tag { background: #e8f0fb; color: #315d91; }
+.question-detail-meta {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px;
+  margin-top: 13px; padding: 11px; border-radius: 8px; background: #edf5f1;
+  color: #526b60; font-size: 10px; line-height: 1.5;
+}
+.question-detail-note {
+  margin-top: 10px; padding: 10px; border-radius: 8px; background: #fff;
+  color: #356a5b; font-size: 11px; line-height: 1.5;
+}
+.question-detail-actions { justify-content: flex-end; margin-top: 12px; }
+@media (max-width: 560px) {
+  .question-detail-panel { padding: 10px; }
+  .question-detail-option { flex-wrap: wrap; }
+  .question-detail-meta { grid-template-columns: 1fr; }
+  .detail-answer-tag, .detail-choice-tag { margin-left: 35px; }
+}
+.source-image-fallback { display: none; color: #0a7964; font-size: 11px; text-decoration: underline; }
+.source-image-link img[hidden] + .source-image-fallback { display: inline-block; }
+.response-url-field { grid-column: 1 / -1; }
+.coverage-question { flex-wrap: wrap; }
+
+
+/* Rich response-sheet content: preserve safe HTML structure without importing source CSS. */
+.rich-question-content,
+.rich-option-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rich-question-content {
+  overflow-x: auto;
+  white-space: normal;
+}
+.rich-question-content p,
+.rich-question-content div {
+  margin: 0 0 0.55rem;
+}
+.rich-question-content p:last-child,
+.rich-question-content div:last-child {
+  margin-bottom: 0;
+}
+.rich-question-content sup,
+.rich-option-content sup {
+  vertical-align: super;
+  font-size: 0.72em;
+  line-height: 0;
+}
+.rich-question-content sub,
+.rich-option-content sub {
+  vertical-align: sub;
+  font-size: 0.72em;
+  line-height: 0;
+}
+.rich-question-content .response-sheet-table,
+.rich-option-content .response-sheet-table {
+  display: table;
+  width: max-content;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 0.55rem 0;
+  font-size: 0.92em;
+  background: transparent;
+}
+.rich-question-content .response-sheet-cell,
+.rich-option-content .response-sheet-cell {
+  border: 1px solid #cbd5d1;
+  padding: 0.32rem 0.48rem;
+  min-width: 1.6rem;
+  vertical-align: middle;
+  text-align: left;
+  white-space: normal;
+}
+.rich-question-content .response-sheet-table th,
+.rich-option-content .response-sheet-table th {
+  font-weight: 700;
+}
+.rich-question-content .question-image,
+.rich-option-content .option-image {
+  max-width: min(100%, 34rem);
+  height: auto;
+  vertical-align: middle;
+  margin: 0.25rem 0.35rem;
+}
+
+.rich-question-content pre, .rich-option-content pre { white-space: pre-wrap; }

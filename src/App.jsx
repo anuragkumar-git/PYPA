@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 import {
+  parseTcsIonResponseSheet,
+  sanitizeResponseRichHtml,
+} from "./responseSheetParser";
+import {
   db,
   initializeDatabase,
   importQuestionBank,
@@ -240,7 +244,9 @@ function normalizeQuestion(raw, index, archivePaths = null) {
   const missingImages =
     archivePaths === null
       ? [] // null means this is an edit operation; the existing image store is not revalidated here.
-      : referencedPaths.filter((path) => !archivePaths.has(path));
+      : referencedPaths.filter(
+          (path) => !/^https?:\/\//i.test(path) && !archivePaths.has(path),
+        );
   const hasImageReference = referencedPaths.length > 0;
   const questionMissing = typeof q.question !== "string" || !q.question.trim();
   const optionMissing = options.some((o) => !o.trim());
@@ -332,6 +338,48 @@ function validateAndNormalizeBank(
   return normalized;
 }
 
+function RichHtml({ html, text = "", className = "", imageNode = null }) {
+  const safeHtml = sanitizeResponseRichHtml(html || "");
+  if (!safeHtml) return <div className={className}>{text}</div>;
+
+  const doc = new DOMParser().parseFromString(
+    `<body>${safeHtml}</body>`,
+    "text/html",
+  );
+  const renderNode = (node, key) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue;
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+    const tag = node.tagName.toLowerCase();
+    if (tag === "span" && node.getAttribute("data-pypa-image-slot")) {
+      return imageNode ? React.cloneElement(imageNode, { key }) : null;
+    }
+    const props = { key };
+    for (const attribute of Array.from(node.attributes)) {
+      const name =
+        attribute.name === "class"
+          ? "className"
+          : attribute.name === "colspan"
+            ? "colSpan"
+            : attribute.name === "rowspan"
+              ? "rowSpan"
+              : attribute.name;
+      props[name] = attribute.value;
+    }
+    const children = Array.from(node.childNodes).map((child, index) =>
+      renderNode(child, `${key}-${index}`),
+    );
+    return React.createElement(tag, props, ...children);
+  };
+
+  return (
+    <div className={className}>
+      {Array.from(doc.body.childNodes).map((node, index) =>
+        renderNode(node, `rich-${index}`),
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [bank, setBank] = useState([]);
   const [progress, setProgress] = useState(loadProgress);
@@ -374,6 +422,15 @@ function App() {
 
   // Add-paper workflow.
   const [manualPaperOpen, setManualPaperOpen] = useState(false);
+  const [responseSheetOpen, setResponseSheetOpen] = useState(false);
+  const [responseSheetFile, setResponseSheetFile] = useState(null);
+  const [responseSheetHtml, setResponseSheetHtml] = useState("");
+  const [responseSheetUrl, setResponseSheetUrl] = useState("");
+  const [responseSheetSourceLabel, setResponseSheetSourceLabel] = useState("");
+  const [expandedQuestionId, setExpandedQuestionId] = useState(null);
+  const [responseSheetPaperId, setResponseSheetPaperId] = useState("");
+  const [responseSheetPreview, setResponseSheetPreview] = useState(null);
+  const [responseSheetError, setResponseSheetError] = useState("");
   const [paperForm, setPaperForm] = useState({
     id: "",
     date: "",
@@ -432,15 +489,22 @@ function App() {
     let cancelled = false;
     const refs = new Map();
     bank.forEach((q) => {
-      if (q.questionImage)
+      if (q.questionImage && !/^https?:\/\//i.test(q.questionImage))
         refs.set(`${q.paperId}::${normalizePath(q.questionImage)}`, {
           path: normalizePath(q.questionImage),
           paperId: q.paperId,
         });
       (q.options || []).forEach((option) => {
-        if (isImagePath(option))
+        if (isImagePath(option) && !/^https?:\/\//i.test(option))
           refs.set(`${q.paperId}::${normalizePath(option)}`, {
             path: normalizePath(option),
+            paperId: q.paperId,
+          });
+      });
+      (q.optionImageSources || []).forEach((source) => {
+        if (source && !/^https?:\/\//i.test(source))
+          refs.set(`${q.paperId}::${normalizePath(source)}`, {
+            path: normalizePath(source),
             paperId: q.paperId,
           });
       });
@@ -1129,6 +1193,233 @@ function App() {
     });
   }
 
+  async function handleResponseSheetFileChange(event) {
+    const file = event.target.files?.[0] || null;
+    setResponseSheetFile(file);
+    setResponseSheetUrl("");
+    setResponseSheetPreview(null);
+    setResponseSheetHtml("");
+    setResponseSheetSourceLabel("");
+    setResponseSheetError("");
+    if (!file) return;
+
+    try {
+      if (file.size > MAX_IMPORT_BYTES) {
+        throw new Error("Response sheet exceeds the 100 MB upload limit.");
+      }
+      if (!/\.html?$/i.test(file.name) && file.type !== "text/html") {
+        throw new Error("Choose an HTML response-sheet file (.html or .htm).");
+      }
+      const html = await file.text();
+      const parsed = await parseTcsIonResponseSheet(
+        html,
+        responseSheetPaperId.trim() || "response-sheet-preview",
+      );
+      setResponseSheetHtml(html);
+      setResponseSheetSourceLabel(file.name);
+      setResponseSheetPreview(parsed);
+    } catch (error) {
+      setResponseSheetError(
+        error.message || "Could not read this response sheet.",
+      );
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  // Fetch a public response-sheet URL directly in the browser, then pass its HTML
+  // through the exact same parser used by the file-upload path.
+  async function handleFetchResponseSheetUrl() {
+    const rawUrl = responseSheetUrl.trim();
+    if (!rawUrl) {
+      setResponseSheetError("Paste the response-sheet URL first.");
+      return;
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(rawUrl);
+    } catch {
+      setResponseSheetError("Enter a valid HTTPS response-sheet URL.");
+      return;
+    }
+    if (parsedUrl.protocol !== "https:") {
+      setResponseSheetError("Only HTTPS response-sheet URLs are supported.");
+      return;
+    }
+
+    setDbBusy(true);
+    setResponseSheetError("");
+    setResponseSheetPreview(null);
+    setResponseSheetHtml("");
+    setResponseSheetFile(null);
+    try {
+      const response = await fetch(parsedUrl.href, {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        headers: { Accept: "text/html,application/xhtml+xml" },
+      });
+      if (!response.ok) {
+        throw new Error(`The URL returned HTTP ${response.status}.`);
+      }
+      const html = await response.text();
+      if (!html.trim()) throw new Error("The URL returned an empty response.");
+      if (new Blob([html]).size > MAX_IMPORT_BYTES) {
+        throw new Error("Response sheet exceeds the 100 MB import limit.");
+      }
+      const sourceUrl = response.url || parsedUrl.href;
+      const imageOrigin = `${new URL(sourceUrl).origin}/`;
+      const parsed = await parseTcsIonResponseSheet(
+        html,
+        responseSheetPaperId.trim() || "response-sheet-preview",
+        imageOrigin,
+      );
+      setResponseSheetHtml(html);
+      setResponseSheetSourceLabel(sourceUrl);
+      setResponseSheetPreview(parsed);
+    } catch (error) {
+      const message =
+        error?.message || "Could not fetch the response-sheet URL.";
+      const isCorsOrNetwork = error instanceof TypeError;
+      setResponseSheetError(
+        isCorsOrNetwork
+          ? "The browser could not read this URL. The page may be public but its server does not allow cross-origin (CORS) requests. Upload the saved HTML file instead; a proxy is only needed for URLs whose hosts block browser access."
+          : message,
+      );
+    } finally {
+      setDbBusy(false);
+    }
+  }
+
+  async function handleImportResponseSheet() {
+    const paperId = responseSheetPaperId.trim();
+
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(paperId)) {
+      setResponseSheetError(
+        "Paper ID must start with a letter or number and contain only letters, numbers, hyphens, or underscores.",
+      );
+      return;
+    }
+    if (!responseSheetHtml) {
+      setResponseSheetError(
+        "Upload an HTML file or fetch a response-sheet URL first.",
+      );
+      return;
+    }
+    if (papers.some((id) => id.toLowerCase() === paperId.toLowerCase())) {
+      setResponseSheetError(
+        `Paper "${paperId}" already exists. Choose a unique Paper ID.`,
+      );
+      return;
+    }
+
+    setDbBusy(true);
+    setResponseSheetError("");
+    setDbMessage("");
+
+    try {
+      if (new Blob([responseSheetHtml]).size > MAX_IMPORT_BYTES) {
+        throw new Error("Response sheet exceeds the 100 MB upload limit.");
+      }
+
+      // Parse again with the final paper ID so embedded image paths are paper-scoped.
+      const imageOrigin = /^https:\/\//i.test(responseSheetSourceLabel)
+        ? `${new URL(responseSheetSourceLabel).origin}/`
+        : undefined;
+      const parsed = await parseTcsIonResponseSheet(
+        responseSheetHtml,
+        paperId,
+        imageOrigin,
+      );
+      const existing = await db.questions.toArray();
+      const archivePaths = new Set(
+        parsed.imageEntries.map((item) => normalizePath(item.path)),
+      );
+      const normalized = validateAndNormalizeBank(
+        parsed.questions,
+        existing,
+        archivePaths,
+      );
+
+      // Keep parser-specific limitations visible; the generic normalizer cannot know
+      // whether an image was externally linked or whether a cell mixed text and imagery.
+      const issuesByNumber = new Map(
+        parsed.questionIssues.map((item) => [
+          item.questionNumber,
+          item.reasons,
+        ]),
+      );
+      const importQuestions = normalized.map((question) => {
+        const parserIssues = issuesByNumber.get(question.questionNumber) || [];
+        if (!parserIssues.length) return question;
+        return {
+          ...question,
+          visualReviewNeeded: true,
+          practiceReady: false,
+          reviewReasons: [
+            ...new Set([...(question.reviewReasons || []), ...parserIssues]),
+          ],
+        };
+      });
+
+      // The existing database importer stores question rows and image Blobs together.
+      await importQuestionBank(importQuestions, parsed.imageEntries);
+
+      const metadataRecord = {
+        id: paperId,
+        date: parsed.metadata.date || "",
+        shift: parsed.metadata.shift || "",
+        paperFile: "",
+        questionCount: importQuestions.length,
+        createdAt: new Date().toISOString(),
+        source: "TCS iON / Digialm response sheet",
+        examGroup: parsed.metadata.examGroup || "",
+        positiveMarks: parsed.metadata.positiveMarks,
+        negativeMarks: parsed.metadata.negativeMarks,
+      };
+      await db.papers.put(metadataRecord);
+
+      const [updatedQuestions, updatedPapers, updatedCategories] =
+        await Promise.all([
+          db.questions.orderBy("paperId").toArray(),
+          db.papers.toArray(),
+          db.categories.toArray(),
+        ]);
+
+      setBank(updatedQuestions);
+      setPaperRecords(updatedPapers);
+      setCategoryRecords(updatedCategories);
+      setCoveragePaper(paperId);
+      setCoverageSubject("All");
+      setCoverageTopic("All");
+      setCoverageStatus("All");
+      setCoverageSearch("");
+      setCoverageOpen(true);
+
+      const reviewCount = importQuestions.filter(
+        (q) => !isPracticeReady(q),
+      ).length;
+      const importedImageCount = parsed.imageEntries.length;
+      setDbMessage(
+        `Imported ${importQuestions.length} question(s) into "${paperId}" with ${importedImageCount} embedded image(s). ${reviewCount ? `${reviewCount} question(s) need review.` : "All questions are practice-ready."}`,
+      );
+      setResponseSheetOpen(false);
+      setResponseSheetFile(null);
+      setResponseSheetHtml("");
+      setResponseSheetUrl("");
+      setResponseSheetSourceLabel("");
+      setResponseSheetPreview(null);
+      setResponseSheetPaperId("");
+    } catch (error) {
+      setResponseSheetError(
+        error.message || "Could not import the response sheet.",
+      );
+    } finally {
+      setDbBusy(false);
+    }
+  }
+
   // Create and persist paper metadata before adding its first question.
   async function handleCreateManualPaper() {
     const paperId = paperForm.id.trim();
@@ -1491,6 +1782,7 @@ function App() {
   }
 
   function startEditingQuestion(q) {
+    setExpandedQuestionId(null);
     const savedState = getState(progress, q);
 
     setEditingQuestionId(q.id);
@@ -1750,43 +2042,13 @@ function App() {
     }
   }
 
+  // Open the inline detail panel for every question, including incomplete/review questions.
+  // This deliberately does not start a quiz session or scroll to the quiz area.
   function openCoverageQuestion(q) {
-    // On mobile, close the sidebar when the user navigates to a question.
     setSidebarOpen(false);
-
-    if (!isPracticeReady(q)) {
-      setSessionError(
-        `${q.id} needs review: ${
-          (q.reviewReasons || []).join("; ") ||
-          "Check its question, options, answer key, and images."
-        }`,
-      );
-
-      // Review warnings are shown above the question panel.
-      // Scroll to the warning instead of returning to the import module.
-      requestAnimationFrame(() => {
-        document
-          .getElementById("main-content")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-      return;
-    }
-
-    setSessionError("");
-    setCompletedSession(null);
-    setSession([q]);
-    setIdx(0);
-    setSelected(null);
-    setChecked(false);
-    setSessionResults({});
-
-    // Scroll directly to the question panel, not the top of the page.
-    // The panel already exists in the DOM, so this target is stable.
-    requestAnimationFrame(() => {
-      document
-        .getElementById("quiz-panel")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setEditingQuestionId(null);
+    setEditDraft(null);
+    setExpandedQuestionId((current) => (current === q.id ? null : q.id));
   }
 
   const attemptedQuestions = bank.filter(
@@ -1913,6 +2175,29 @@ function App() {
 
   function renderImage(path, alt, className, paperId) {
     const normalized = normalizePath(path);
+    // Remote Digialm images remain source links; local uploads resolve through IndexedDB Blobs.
+    if (/^https?:\/\//i.test(String(path || ""))) {
+      return (
+        <a
+          href={path}
+          target="_blank"
+          rel="noreferrer"
+          className="source-image-link"
+          title="Open original image"
+        >
+          <img
+            className={className}
+            src={path}
+            alt={alt}
+            loading="lazy"
+            onError={(event) => {
+              event.currentTarget.hidden = true;
+            }}
+          />
+          <span className="source-image-fallback">Open source image</span>
+        </a>
+      );
+    }
     const src = imageUrls[`${paperId}::${normalized}`];
     if (!src)
       return (
@@ -2289,20 +2574,37 @@ function App() {
                     <span className="tag-warning">Key unverified</span>
                   )}
                 </div>
-                <div className="question-text">
-                  {current.question ||
-                    "Question text missing — review the source."}
-                </div>
-                {current.questionImage && (
-                  <div className="source-image-wrap">
-                    {renderImage(
-                      current.questionImage,
-                      `Question ${current.questionNumber}`,
-                      "question-image",
-                      current.paperId,
-                    )}
-                  </div>
-                )}
+                <RichHtml
+                  className="question-text rich-question-content"
+                  html={current.questionHtml}
+                  text={
+                    current.question ||
+                    "Question text missing — review the source."
+                  }
+                  imageNode={
+                    current.questionImage
+                      ? renderImage(
+                          current.questionImage,
+                          `Question ${current.questionNumber}`,
+                          "question-image",
+                          current.paperId,
+                        )
+                      : null
+                  }
+                />
+                {current.questionImage &&
+                  !String(current.questionHtml || "").includes(
+                    "data-pypa-image-slot",
+                  ) && (
+                    <div className="source-image-wrap">
+                      {renderImage(
+                        current.questionImage,
+                        `Question ${current.questionNumber}`,
+                        "question-image",
+                        current.paperId,
+                      )}
+                    </div>
+                  )}
                 {current.reviewReasons?.length > 0 && (
                   <div className="alert">
                     <AlertTriangle size={16} />
@@ -2335,11 +2637,23 @@ function App() {
                             current.paperId,
                           )
                         ) : (
-                          <span>
-                            {option || (
-                              <em>Option text missing — review required</em>
-                            )}
-                          </span>
+                          <RichHtml
+                            className="rich-option-content"
+                            html={current.optionHtml?.[i]}
+                            text={
+                              option || "Option text missing — review required"
+                            }
+                            imageNode={
+                              current.optionImageSources?.[i]
+                                ? renderImage(
+                                    current.optionImageSources[i],
+                                    `Option ${LABELS[i]} image`,
+                                    "option-image",
+                                    current.paperId,
+                                  )
+                                : null
+                            }
+                          />
                         )}
                       </button>
                     );
@@ -2449,10 +2763,24 @@ function App() {
                       paperFile: "",
                     });
                     setManualPaperOpen((open) => !open);
+                    setResponseSheetOpen(false);
                     setManualEntryOpen(false);
                   }}
                 >
                   <Plus size={14} /> Add paper
+                </button>
+
+                <button
+                  className="button outline"
+                  disabled={dbBusy}
+                  onClick={() => {
+                    setResponseSheetOpen((open) => !open);
+                    setManualPaperOpen(false);
+                    setManualEntryOpen(false);
+                    setResponseSheetError("");
+                  }}
+                >
+                  <Upload size={14} /> Import response sheet
                 </button>
 
                 <button
@@ -2587,6 +2915,188 @@ function App() {
                     Cancel
                   </button>
                 </div>
+              </div>
+            )}
+
+            {responseSheetOpen && (
+              <div className="manual-builder">
+                <div className="manual-builder-heading">
+                  <div>
+                    <h3>Import TCS iON / Digialm response sheet</h3>
+                    <p>
+                      Import a saved HTML response sheet or fetch its page URL.
+                      Both inputs use the same TCS iON / Digialm parser.
+                    </p>
+                  </div>
+                  <button
+                    className="icon-button"
+                    onClick={() => {
+                      setResponseSheetOpen(false);
+                      setResponseSheetFile(null);
+                      setResponseSheetHtml("");
+                      setResponseSheetUrl("");
+                      setResponseSheetSourceLabel("");
+                      setResponseSheetPreview(null);
+                      setResponseSheetError("");
+                    }}
+                    aria-label="Close response-sheet importer"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+
+                <div className="manual-form-grid">
+                  <label>
+                    Paper ID <span className="required-mark">*</span>
+                    <input
+                      type="text"
+                      value={responseSheetPaperId}
+                      onChange={(e) => setResponseSheetPaperId(e.target.value)}
+                      placeholder="RRB-JE-2026-10-27-S1"
+                      maxLength={80}
+                    />
+                    <small>
+                      Unique ID used to identify this paper in PYPA.
+                    </small>
+                  </label>
+
+                  {/* <label className="response-url-field"> 
+                    Response-sheet URL
+                    <input
+                      type="url"
+                      value={responseSheetUrl}
+                      onChange={(e) => {
+                        setResponseSheetUrl(e.target.value);
+                        setResponseSheetHtml("");
+                        setResponseSheetSourceLabel("");
+                        setResponseSheetPreview(null);
+                        setResponseSheetError("");
+                      }}
+                      placeholder="https://rrb.digialm.com/..."
+                      disabled={dbBusy}
+                    /> 
+                     <small>
+                      Paste a public HTTPS URL. Direct fetch works only if the
+                      host allows browser cross-origin (CORS) access.
+                    </small> 
+                    <button
+                      type="button"
+                      className="button outline"
+                      onClick={handleFetchResponseSheetUrl}
+                      disabled={dbBusy || !responseSheetUrl.trim()}
+                    >
+                      <Download size={14} />{" "}
+                      {dbBusy ? "Fetching…" : "Fetch from URL"}
+                    </button> 
+                  </label> */}
+
+                  <label>
+                    HTML response sheet file
+                    <input
+                      type="file"
+                      accept=".html,.htm,text/html"
+                      onChange={handleResponseSheetFileChange}
+                      disabled={dbBusy}
+                    />
+                    <small>
+                      Optional if you fetched a public URL above. Upload a saved
+                      .html or .htm file instead.
+                    </small>
+                  </label>
+                </div>
+
+                {responseSheetError && (
+                  <div className="alert" role="alert">
+                    <AlertTriangle size={16} />
+                    <span>{responseSheetError}</span>
+                  </div>
+                )}
+
+                {responseSheetPreview && (
+                  <div className="stats">
+                    <div>
+                      <small>Questions found</small>
+                      <b>{responseSheetPreview.metadata.totalQuestions}</b>
+                    </div>
+                    <div>
+                      <small>Embedded images</small>
+                      <b>{responseSheetPreview.imageEntries.length}</b>
+                    </div>
+                    <div>
+                      <small>Needs review</small>
+                      <b>{responseSheetPreview.questionIssues.length}</b>
+                    </div>
+                  </div>
+                )}
+
+                {responseSheetPreview?.metadata && (
+                  <p className="section-subtitle">
+                    <strong>
+                      {responseSheetPreview.metadata.examGroup ||
+                        "Exam group not detected"}
+                    </strong>
+                    {" · "}
+                    {responseSheetPreview.metadata.dateText ||
+                      "Date not detected"}
+                    {" · "}
+                    {responseSheetPreview.metadata.shift ||
+                      "Shift not detected"}
+                    {responseSheetSourceLabel && (
+                      <>
+                        {" "}
+                        {" · "}Source: {responseSheetSourceLabel}
+                      </>
+                    )}
+                    {responseSheetPreview.questionIssues.length > 0 && (
+                      <>
+                        {" · "}
+                        {responseSheetPreview.questionIssues.length} question(s)
+                        contain structural issues and will be flagged for
+                        review.
+                      </>
+                    )}
+                  </p>
+                )}
+
+                <div className="button-row manual-action-row">
+                  <button
+                    className="button primary"
+                    onClick={handleImportResponseSheet}
+                    disabled={
+                      dbBusy ||
+                      !responseSheetHtml ||
+                      !responseSheetPaperId.trim()
+                    }
+                  >
+                    <Upload size={15} />{" "}
+                    {dbBusy ? "Importing…" : "Import questions"}
+                  </button>
+                  <button
+                    className="button outline"
+                    onClick={() => {
+                      setResponseSheetOpen(false);
+                      setResponseSheetFile(null);
+                      setResponseSheetHtml("");
+                      setResponseSheetUrl("");
+                      setResponseSheetSourceLabel("");
+                      setResponseSheetPreview(null);
+                      setResponseSheetPaperId("");
+                      setResponseSheetError("");
+                    }}
+                    disabled={dbBusy}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="fineprint">
+                  The parser supports the common TCS iON / Digialm
+                  response-sheet layout, including line breaks, superscripts,
+                  subscripts, basic formatting, and simple tables. Embedded
+                  images are stored locally; linked images remain as source
+                  URLs. Public URL fetching is attempted directly in your
+                  browser and depends on the source host allowing CORS. If it
+                  does not, upload the saved HTML file.
+                </p>
               </div>
             )}
 
@@ -3184,6 +3694,7 @@ function App() {
                         return (
                           <div className="coverage-question" key={q.id}>
                             {editing && editDraft ? (
+                              // 1. EDIT MODE
                               <div className="question-edit-form">
                                 <label>
                                   Question {q.questionNumber} Text
@@ -3644,7 +4155,188 @@ function App() {
                                   </button>
                                 </div>
                               </div>
+                            ) : expandedQuestionId === q.id ? (
+                              // 2. EXPANDED MODE
+                              <div className="question-detail-panel">
+                                <div className="question-detail-heading">
+                                  <strong>
+                                    Question {q.questionNumber} · Full details
+                                  </strong>
+                                  <button
+                                    type="button"
+                                    className="icon-button"
+                                    onClick={() => setExpandedQuestionId(null)}
+                                    aria-label="Close question details"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                                <RichHtml
+                                  className="question-detail-stem rich-question-content"
+                                  html={q.questionHtml}
+                                  text={
+                                    q.question ||
+                                    "Question text is not available in the source."
+                                  }
+                                  imageNode={
+                                    q.questionImage
+                                      ? renderImage(
+                                          q.questionImage,
+                                          `Question ${q.questionNumber}`,
+                                          "question-image",
+                                          q.paperId,
+                                        )
+                                      : null
+                                  }
+                                />
+                                {q.questionImage &&
+                                  !String(q.questionHtml || "").includes(
+                                    "data-pypa-image-slot",
+                                  ) &&
+                                  renderImage(
+                                    q.questionImage,
+                                    `Question ${q.questionNumber}`,
+                                    "question-image",
+                                    q.paperId,
+                                  )}
+                                <div className="question-detail-options">
+                                  {(q.options || []).map(
+                                    (option, optionIndex) => {
+                                      const optionImage = isImagePath(option);
+                                      const extraImage =
+                                        q.optionImageSources?.[optionIndex];
+                                      return (
+                                        <div
+                                          className="question-detail-option"
+                                          key={`${q.id}-detail-${optionIndex}`}
+                                        >
+                                          <span className="option-label">
+                                            {LABELS[optionIndex]}
+                                          </span>
+                                          <div>
+                                            {optionImage ? (
+                                              renderImage(
+                                                option,
+                                                `Option ${LABELS[optionIndex]}`,
+                                                "option-image",
+                                                q.paperId,
+                                              )
+                                            ) : (
+                                              <RichHtml
+                                                className="rich-option-content"
+                                                html={
+                                                  q.optionHtml?.[optionIndex]
+                                                }
+                                                text={
+                                                  option || "Option unavailable"
+                                                }
+                                                imageNode={
+                                                  extraImage
+                                                    ? renderImage(
+                                                        extraImage,
+                                                        `Option ${LABELS[optionIndex]} image`,
+                                                        "option-image",
+                                                        q.paperId,
+                                                      )
+                                                    : null
+                                                }
+                                              />
+                                            )}
+                                            {extraImage &&
+                                              !String(
+                                                q.optionHtml?.[optionIndex] ||
+                                                  "",
+                                              ).includes(
+                                                "data-pypa-image-slot",
+                                              ) &&
+                                              renderImage(
+                                                extraImage,
+                                                `Option ${LABELS[optionIndex]} image`,
+                                                "option-image",
+                                                q.paperId,
+                                              )}
+                                          </div>
+                                          {q.correctAnswerIndex ===
+                                            optionIndex && (
+                                            <span className="detail-answer-tag">
+                                              Official answer
+                                            </span>
+                                          )}
+                                          {q.source
+                                            ?.originalChosenOptionIndex ===
+                                            optionIndex && (
+                                            <span className="detail-choice-tag">
+                                              Candidate selected
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    },
+                                  )}
+                                </div>
+                                <div className="question-detail-meta">
+                                  <span>
+                                    <b>Subject:</b>{" "}
+                                    {q.subject || "Not provided"}
+                                  </span>
+                                  <span>
+                                    <b>Topic:</b> {q.topic || "Not provided"}
+                                  </span>
+                                  <span>
+                                    <b>Response status:</b>{" "}
+                                    {q.source?.originalStatus || "Not provided"}
+                                  </span>
+                                  <span>
+                                    <b>Candidate choice:</b>{" "}
+                                    {Number.isInteger(
+                                      q.source?.originalChosenOptionIndex,
+                                    )
+                                      ? LABELS[
+                                          q.source.originalChosenOptionIndex
+                                        ]
+                                      : "Not answered / not recorded"}
+                                  </span>
+                                  <span>
+                                    <b>Source question ID:</b>{" "}
+                                    {q.source?.questionId || "Not provided"}
+                                  </span>
+                                  <span>
+                                    <b>Answer key:</b>{" "}
+                                    {q.answerValidation ===
+                                    "source-key-verified"
+                                      ? "Verified from official green marker"
+                                      : "Not verified"}
+                                  </span>
+                                </div>
+                                {(q.notes || state.note) && (
+                                  <div className="question-detail-note">
+                                    <b>Note:</b> {q.notes || state.note}
+                                  </div>
+                                )}
+                                {q.reviewReasons?.length > 0 && (
+                                  <div className="alert">
+                                    <AlertTriangle size={15} />
+                                    <span>{q.reviewReasons.join("; ")}</span>
+                                  </div>
+                                )}
+                                <div className="button-row question-detail-actions">
+                                  <button
+                                    className="button primary"
+                                    onClick={() => startEditingQuestion(q)}
+                                    disabled={dbBusy}
+                                  >
+                                    Edit question
+                                  </button>
+                                  <button
+                                    className="button outline"
+                                    onClick={() => setExpandedQuestionId(null)}
+                                  >
+                                    Close details
+                                  </button>
+                                </div>
+                              </div>
                             ) : (
+                              // 3. NORMAL MODE
                               <>
                                 <div className="coverage-question-main">
                                   <span className="coverage-q-number">
@@ -3733,8 +4425,9 @@ function App() {
                                 <button
                                   className="button outline coverage-open-button"
                                   onClick={() => openCoverageQuestion(q)}
+                                  aria-expanded={false}
                                 >
-                                  {ready ? "Open" : "Review info"}
+                                  Open
                                 </button>
                               </>
                             )}
