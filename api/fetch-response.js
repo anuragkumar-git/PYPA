@@ -27,9 +27,14 @@ export default async function handler(req, res) {
     }
 
     const upstream = await fetch(target.toString(), {
+      method: "GET",
       headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "text/html,application/xhtml+xml",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept":
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://rrb.digialm.com/",
       },
       redirect: "manual",
     });
@@ -41,8 +46,19 @@ export default async function handler(req, res) {
     }
 
     if (!upstream.ok) {
+      const errorBody = await upstream.text();
+
+      console.error("Digialm response:", {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        body: errorBody.slice(0, 3000),
+        url: target.href,
+      });
+
       return res.status(502).json({
         error: `Digialm returned HTTP ${upstream.status}.`,
+        upstreamStatus: upstream.status,
+        upstreamMessage: errorBody.slice(0, 1000),
       });
     }
 
