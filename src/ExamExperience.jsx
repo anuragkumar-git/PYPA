@@ -83,7 +83,9 @@ export default function ExamExperience({
   );
   const savedSettings = selectedPaper.examSettings || {};
   const [navigation, setNavigation] = useState(
-    savedSettings.sectionNavigation || "free",
+    savedSettings.sectionNavigation === "timed"
+      ? "free"
+      : savedSettings.sectionNavigation || "free",
   );
   const [overallMinutes, setOverallMinutes] = useState(
     asMinutes(savedSettings.overallDurationMinutes),
@@ -102,20 +104,17 @@ export default function ExamExperience({
   useEffect(() => {
     const savedExam = loadSavedExam();
     if (savedExam?.status === "running") {
-      const restoredQuestions = (
-        savedExam.questionIds ||
-        savedExam.questions?.map((q) => q.id) ||
-        []
-      )
+      const savedQuestionIds =
+        savedExam.questionIds || savedExam.questions?.map((q) => q.id) || [];
+      const restoredQuestions = savedQuestionIds
         .map((id) => questions.find((item) => item.id === id))
         .filter(Boolean);
+
       if (
         restoredQuestions.length &&
-        restoredQuestions.length ===
-          (savedExam.questionIds || savedExam.questions || []).length
+        restoredQuestions.length === savedQuestionIds.length
       ) {
-        setPaperId(savedExam.paperId);
-        setExam({
+        const restored = {
           ...savedExam,
           questions: restoredQuestions,
           currentQuestionId: restoredQuestions.some(
@@ -123,13 +122,92 @@ export default function ExamExperience({
           )
             ? savedExam.currentQuestionId
             : restoredQuestions[0].id,
-        });
+        };
+
+        // Migrate sessions created before strict sectional timing existed.
+        // A legacy session with every section timed becomes strict timed mode;
+        // a partially timed legacy session is normalized to overall-only mode.
+        if (typeof restored.config?.sectionalTiming !== "boolean") {
+          const legacySections = restored.sections || [];
+          const allLegacySectionsTimed =
+            legacySections.length > 0 &&
+            legacySections.every(
+              (section) => Number(section.durationSeconds) > 0,
+            );
+
+          if (allLegacySectionsTimed) {
+            let elapsedSeconds = 0;
+            const migratedSections = legacySections.map((section) => {
+              const durationSeconds = Number(section.durationSeconds);
+              const startedAt = restored.startedAt + elapsedSeconds * 1000;
+              elapsedSeconds += durationSeconds;
+              const deadline = restored.startedAt + elapsedSeconds * 1000;
+              return {
+                ...section,
+                startedAt,
+                deadline,
+                locked: deadline <= Date.now(),
+              };
+            });
+            const activeIndex = migratedSections.findIndex(
+              (section) => section.deadline > Date.now(),
+            );
+            const activeSection = migratedSections[activeIndex];
+            const activeQuestionId = activeSection?.questionIds?.includes(
+              restored.currentQuestionId,
+            )
+              ? restored.currentQuestionId
+              : activeSection?.questionIds?.[0];
+
+            restored.sections = migratedSections;
+            restored.config = {
+              ...restored.config,
+              sectionalTiming: true,
+              sectionNavigation: "timed",
+              overallDurationSeconds: elapsedSeconds,
+              totalDurationSeconds: elapsedSeconds,
+            };
+            restored.overallDeadline = null;
+            if (activeQuestionId) {
+              restored.currentQuestionId = activeQuestionId;
+              restored.answers[activeQuestionId] = {
+                ...restored.answers[activeQuestionId],
+                visited: true,
+              };
+            } else {
+              restored.status = "submitted";
+              restored.submittedAt = Date.now();
+              restored.finishReason = "section-time";
+            }
+          } else {
+            restored.sections = legacySections.map((section) => ({
+              ...section,
+              durationSeconds: null,
+              startedAt: null,
+              deadline: null,
+              locked: false,
+            }));
+            restored.config = {
+              ...restored.config,
+              sectionalTiming: false,
+              sectionNavigation:
+                restored.config?.sectionNavigation || "free",
+            };
+          }
+        }
+
+        setPaperId(savedExam.paperId);
+        setExam(restored);
       }
     }
   }, []);
 
   useEffect(() => {
-    setNavigation(savedSettings.sectionNavigation || "free");
+    setNavigation(
+      savedSettings.sectionNavigation === "timed"
+        ? "free"
+        : savedSettings.sectionNavigation || "free",
+    );
     setOverallMinutes(asMinutes(savedSettings.overallDurationMinutes));
     setPositive(savedSettings.positiveMarks ?? 1);
     setNegative(savedSettings.negativeMarks ?? 0.25);
@@ -157,15 +235,29 @@ export default function ExamExperience({
     }
   }, [exam]);
 
+  const activeSections = exam?.sections || sections;
+  const setupHasAnySectionTime = sections.some(
+    (section) => asMinutes(section.durationMinutes) !== "",
+  );
+  const setupHasAllSectionTimes =
+    sections.length > 0 &&
+    sections.every((section) => asMinutes(section.durationMinutes) !== "");
+  const setupSectionTotalMinutes = setupHasAllSectionTimes
+    ? sections.reduce(
+        (total, section) => total + Number(section.durationMinutes),
+        0,
+      )
+    : null;
+
   const sectionByQuestion = useMemo(() => {
     const map = {};
-    sections.forEach((section, index) =>
+    activeSections.forEach((section, index) =>
       section.questionIds.forEach((id) => {
         map[id] = index;
       }),
     );
     return map;
-  }, [sections]);
+  }, [activeSections]);
 
   const currentQuestion =
     exam?.questions.find((q) => q.id === exam.currentQuestionId) || null;
@@ -176,6 +268,22 @@ export default function ExamExperience({
     ? (sectionByQuestion[currentQuestion.id] ?? 0)
     : 0;
   const currentSection = exam?.sections[currentSectionIndex];
+  const sectionalTiming = Boolean(exam?.config?.sectionalTiming);
+  const currentSectionExpired = Boolean(
+    sectionalTiming &&
+      currentSection?.deadline &&
+      currentSection.deadline <= Date.now(),
+  );
+  const currentSectionQuestionIds = currentSection?.questionIds || [];
+  const currentSectionQuestionPosition = currentQuestion
+    ? currentSectionQuestionIds.indexOf(currentQuestion.id)
+    : -1;
+  const previousQuestionId = sectionalTiming
+    ? currentSectionQuestionIds[currentSectionQuestionPosition - 1]
+    : exam?.questions[currentQuestionIndex - 1]?.id;
+  const nextQuestionId = sectionalTiming
+    ? currentSectionQuestionIds[currentSectionQuestionPosition + 1]
+    : exam?.questions[currentQuestionIndex + 1]?.id;
 
   const overallRemaining = exam?.overallDeadline
     ? Math.max(0, Math.ceil((exam.overallDeadline - now) / 1000))
@@ -208,35 +316,189 @@ export default function ExamExperience({
 
   useEffect(() => {
     if (!exam || exam.status !== "running") return;
-    if (overallRemaining === 0) {
+
+    // Overall-only mode: reaching the overall deadline submits the exam.
+    if (!exam.config?.sectionalTiming && overallRemaining === 0) {
       finishExam("time");
       return;
     }
-    if (sectionRemaining === 0 && currentSection && !currentSection.locked) {
-      setExam((prev) => ({
-        ...prev,
-        sections: prev.sections.map((s, i) =>
-          i === currentSectionIndex ? { ...s, locked: true } : s,
-        ),
-      }));
+
+    // Sectional mode: section deadlines are cumulative and absolute. If the
+    // browser was suspended, skip every section whose deadline has passed.
+    if (
+      exam.config?.sectionalTiming &&
+      currentSection &&
+      !currentSection.locked &&
+      currentSection.deadline &&
+      now >= currentSection.deadline
+    ) {
+      setExam((prev) => {
+        if (!prev || prev.status !== "running") return prev;
+
+        const nextIndex = prev.sections.findIndex(
+          (section, index) => index > currentSectionIndex && section.deadline > now,
+        );
+        const expiredSections = prev.sections.map((section) =>
+          section.deadline && section.deadline <= now
+            ? { ...section, locked: true }
+            : section,
+        );
+
+        // The final timed section has expired: submit automatically.
+        if (nextIndex < 0) {
+          return {
+            ...prev,
+            sections: expiredSections,
+            status: "submitted",
+            submittedAt: now,
+            finishReason: "section-time",
+          };
+        }
+
+        const nextQuestionId = expiredSections[nextIndex].questionIds[0];
+        if (!nextQuestionId) {
+          return {
+            ...prev,
+            sections: expiredSections,
+            status: "submitted",
+            submittedAt: now,
+            finishReason: "section-time",
+          };
+        }
+
+        return {
+          ...prev,
+          sections: expiredSections,
+          currentQuestionId: nextQuestionId,
+          answers: {
+            ...prev.answers,
+            [nextQuestionId]: {
+              ...prev.answers[nextQuestionId],
+              visited: true,
+            },
+          },
+        };
+      });
     }
-  }, [overallRemaining, sectionRemaining, exam?.status, currentSectionIndex]);
+  }, [
+    now,
+    exam?.status,
+    exam?.config?.sectionalTiming,
+    currentSectionIndex,
+    currentSection?.deadline,
+    currentSection?.locked,
+    overallRemaining,
+  ]);
 
   async function startExam() {
     if (!paperQuestions.length) return;
-    const configuredSections = sections.map((s) => ({
-      ...s,
-      durationSeconds: s.durationMinutes
-        ? Number(s.durationMinutes) * 60
-        : null,
-      deadline: null,
-      locked: false,
-    }));
-    const first = paperQuestions[0];
+
+    const hasAnySectionTime = sections.some(
+      (section) => asMinutes(section.durationMinutes) !== "",
+    );
+    const hasAllSectionTimes =
+      sections.length > 0 &&
+      sections.every((section) => asMinutes(section.durationMinutes) !== "");
+
+    if (hasAnySectionTime && !hasAllSectionTimes) {
+      setSetupError(
+        "Sectional timing must be configured for every section, or cleared from every section.",
+      );
+      return;
+    }
+
+    if (
+      hasAllSectionTimes &&
+      sections.some(
+        (section) =>
+          Number(section.durationMinutes) < 1 ||
+          Number(section.durationMinutes) > 1440 ||
+          !Number.isInteger(Number(section.durationMinutes)),
+      )
+    ) {
+      setSetupError(
+        "Each section duration must be a whole number between 1 and 1440 minutes.",
+      );
+      return;
+    }
+
+    const positiveMarks = Number(positive);
+    const negativeMarks = Number(negative);
+    if (
+      !Number.isFinite(positiveMarks) ||
+      positiveMarks < 0 ||
+      !Number.isFinite(negativeMarks) ||
+      negativeMarks < 0
+    ) {
+      setSetupError("Marks and penalties must be valid non-negative numbers.");
+      return;
+    }
+
+    if (
+      !hasAnySectionTime &&
+      overallMinutes &&
+      (!Number.isFinite(Number(overallMinutes)) ||
+        Number(overallMinutes) < 1 ||
+        Number(overallMinutes) > 1440)
+    ) {
+      setSetupError("Overall duration must be between 1 and 1440 minutes.");
+      return;
+    }
+
+    const sectionalTotalMinutes = hasAllSectionTimes
+      ? sections.reduce(
+          (total, section) => total + Number(section.durationMinutes),
+          0,
+        )
+      : 0;
+    const sectionalTotalSeconds = sectionalTotalMinutes * 60;
+
+    // Save settings before starting the clock so a slow IndexedDB write does
+    // not consume the user's first section time.
+    if (saveDefaults) {
+      try {
+        await onSavePaperSettings?.(paperId, {
+          // Keep the user's non-timed preference for the case where they later
+          // clear all section timers. Timed mode itself is derived at runtime.
+          sectionNavigation: navigation,
+          overallDurationMinutes: hasAllSectionTimes
+            ? null
+            : overallMinutes || null,
+          positiveMarks,
+          negativeMarks,
+          sections: sections.map(({ name, durationMinutes }) => ({
+            name,
+            durationMinutes: durationMinutes || null,
+          })),
+        });
+      } catch (error) {
+        setSetupError(error?.message || "Could not save paper settings.");
+        return;
+      }
+    }
+
     const start = Date.now();
-    if (configuredSections[0]?.durationSeconds)
-      configuredSections[0].deadline =
-        start + configuredSections[0].durationSeconds * 1000;
+    let cumulativeSeconds = 0;
+    const configuredSections = sections.map((section) => {
+      const durationSeconds = hasAllSectionTimes
+        ? Number(section.durationMinutes) * 60
+        : null;
+      const sectionStart = hasAllSectionTimes
+        ? start + cumulativeSeconds * 1000
+        : null;
+      cumulativeSeconds += durationSeconds || 0;
+      return {
+        ...section,
+        durationSeconds,
+        startedAt: sectionStart,
+        deadline: hasAllSectionTimes
+          ? start + cumulativeSeconds * 1000
+          : null,
+        locked: false,
+      };
+    });
+
+    const first = paperQuestions[0];
     const next = {
       id: `exam-${start}`,
       paperId,
@@ -253,78 +515,66 @@ export default function ExamExperience({
       sections: configuredSections,
       currentQuestionId: first.id,
       config: {
-        sectionNavigation: navigation,
-        positiveMarks: Number(positive),
-        negativeMarks: Number(negative),
-        overallDurationSeconds: overallMinutes
-          ? Number(overallMinutes) * 60
-          : null,
+        sectionNavigation: hasAllSectionTimes ? "timed" : navigation,
+        sectionalTiming: hasAllSectionTimes,
+        positiveMarks,
+        negativeMarks,
+        overallDurationSeconds: hasAllSectionTimes
+          ? sectionalTotalSeconds
+          : overallMinutes
+            ? Number(overallMinutes) * 60
+            : null,
+        totalDurationSeconds: hasAllSectionTimes ? sectionalTotalSeconds : null,
       },
-      overallDeadline: overallMinutes
-        ? start + Number(overallMinutes) * 60000
-        : null,
+      // Section deadlines collectively define the total duration in sectional
+      // mode, so no second overall deadline is created.
+      overallDeadline:
+        !hasAllSectionTimes && overallMinutes
+          ? start + Number(overallMinutes) * 60000
+          : null,
     };
-    if (saveDefaults) {
-      try {
-        await onSavePaperSettings?.(paperId, {
-          sectionNavigation: navigation,
-          overallDurationMinutes: overallMinutes || null,
-          positiveMarks: Number(positive),
-          negativeMarks: Number(negative),
-          sections: sections.map(({ name, durationMinutes }) => ({
-            name,
-            durationMinutes: durationMinutes || null,
-          })),
-        });
-      } catch (error) {
-        setSetupError(error?.message || "Could not save paper settings.");
-        return;
-      }
-    }
+
+    setSetupError("");
     setNow(start);
     setExam(next);
   }
 
   function navigateTo(questionId) {
     if (!exam || exam.status !== "running") return;
-    const targetSection = exam.sections[sectionByQuestion[questionId] ?? 0];
-    const activeSection =
-      exam.sections[sectionByQuestion[exam.currentQuestionId] ?? 0];
+
+    const targetIndex = sectionByQuestion[questionId];
+    const activeIndex = sectionByQuestion[exam.currentQuestionId] ?? 0;
+    const targetSection = exam.sections[targetIndex];
     if (!targetSection || targetSection.locked) return;
+
+    // Sectional timing is strict: no early entry to future sections and no
+    // return to an earlier section, even through the palette or tabs.
+    if (exam.config?.sectionalTiming && targetIndex !== activeIndex) return;
+
     if (targetSection.deadline && targetSection.deadline <= Date.now()) {
-      setExam((prev) => ({
-        ...prev,
-        sections: prev.sections.map((section, index) =>
-          index === (sectionByQuestion[questionId] ?? 0)
-            ? { ...section, locked: true }
-            : section,
-        ),
-      }));
+      // The timer effect performs the lock + automatic transition. Trigger a
+      // clock refresh so a delayed interval cannot leave an expired section open.
+      setNow(Date.now());
       return;
     }
+
     if (
+      !exam.config?.sectionalTiming &&
       exam.config.sectionNavigation === "sequential" &&
-      targetSection.name !== activeSection?.name
+      targetIndex !== activeIndex &&
+      targetIndex !== activeIndex + 1 &&
+      targetIndex !== activeIndex - 1
     ) {
-      const activeIndex = sectionByQuestion[exam.currentQuestionId] ?? 0;
-      const targetIndex = sectionByQuestion[questionId] ?? 0;
-      if (targetIndex !== activeIndex + 1 && targetIndex !== activeIndex - 1)
-        return;
+      return;
     }
+
     setExam((prev) => {
-      const targetIndex = sectionByQuestion[questionId] ?? 0;
+      if (!prev || prev.status !== "running") return prev;
       const target = prev.sections[targetIndex];
-      const nextSections = prev.sections.map((section, index) =>
-        index === targetIndex && !section.deadline && section.durationSeconds
-          ? {
-              ...section,
-              deadline: Date.now() + section.durationSeconds * 1000,
-            }
-          : section,
-      );
+      if (!target || target.locked) return prev;
+      if (prev.config?.sectionalTiming && targetIndex !== activeIndex) return prev;
       return {
         ...prev,
-        sections: nextSections,
         currentQuestionId: questionId,
         answers: {
           ...prev.answers,
@@ -335,6 +585,10 @@ export default function ExamExperience({
   }
   function updateAnswer(answerIndex) {
     if (!currentQuestion || currentSection?.locked) return;
+    if (sectionalTiming && currentSection?.deadline <= Date.now()) {
+      setNow(Date.now());
+      return;
+    }
     setExam((prev) => ({
       ...prev,
       answers: {
@@ -349,6 +603,10 @@ export default function ExamExperience({
   }
   function clearAnswer() {
     if (!currentQuestion || currentSection?.locked) return;
+    if (sectionalTiming && currentSection?.deadline <= Date.now()) {
+      setNow(Date.now());
+      return;
+    }
     setExam((prev) => ({
       ...prev,
       answers: {
@@ -362,6 +620,10 @@ export default function ExamExperience({
   }
   function toggleReview() {
     if (!currentQuestion || currentSection?.locked) return;
+    if (sectionalTiming && currentSection?.deadline <= Date.now()) {
+      setNow(Date.now());
+      return;
+    }
     setExam((prev) => ({
       ...prev,
       answers: {
@@ -463,24 +725,55 @@ export default function ExamExperience({
               <label>
                 Section navigation
                 <select
-                  value={navigation}
+                  value={setupHasAnySectionTime ? "timed" : navigation}
+                  disabled={setupHasAnySectionTime}
                   onChange={(e) => setNavigation(e.target.value)}
                 >
-                  <option value="free">Free navigation</option>
-                  <option value="sequential">Adjacent sections only</option>
+                  {setupHasAnySectionTime ? (
+                    <option value="timed">Automatic · section-by-section</option>
+                  ) : (
+                    <>
+                      <option value="free">Free navigation</option>
+                      <option value="sequential">Adjacent sections only</option>
+                    </>
+                  )}
                 </select>
+                <small>
+                  {setupHasAnySectionTime
+                    ? "Section timers automatically control progression. Switching sections is disabled."
+                    : "Choose how you can move between sections."}
+                </small>
               </label>
               <label>
-                Overall duration (minutes)
+                {setupHasAnySectionTime
+                  ? "Total exam duration (minutes)"
+                  : "Overall duration (minutes)"}
                 <input
                   type="number"
                   min="1"
                   max="1440"
-                  placeholder="No overall timer"
-                  value={overallMinutes}
+                  placeholder={
+                    setupHasAnySectionTime
+                      ? "Complete all section timers"
+                      : "No overall timer"
+                  }
+                  value={
+                    setupHasAnySectionTime
+                      ? setupHasAllSectionTimes
+                        ? setupSectionTotalMinutes
+                        : ""
+                      : overallMinutes
+                  }
+                  disabled={setupHasAnySectionTime}
                   onChange={(e) => setOverallMinutes(asMinutes(e.target.value))}
                 />
-                <small>Manual setting. Leave blank for no overall timer.</small>
+                <small>
+                  {setupHasAnySectionTime
+                    ? setupHasAllSectionTimes
+                      ? "Automatically calculated as the sum of all section time limits."
+                      : "Set a time limit for every section, or clear all section limits to use an overall timer."
+                    : "Manual setting. Leave blank for no overall timer."}
+                </small>
               </label>
               <label>
                 Correct answer marks
@@ -506,7 +799,11 @@ export default function ExamExperience({
             <div className="exam-section-settings">
               <div className="exam-section-settings-head">
                 <h4>Section settings</h4>
-                <span>Expiry action: lock section</span>
+                <span>
+                  {setupHasAnySectionTime
+                    ? "Timed mode · automatic progression · lock on expiry"
+                    : "Optional · configure every section or none"}
+                </span>
               </div>
               {sections.map((section, index) => (
                 <div className="exam-section-setting" key={section.name}>
@@ -520,6 +817,7 @@ export default function ExamExperience({
                       type="number"
                       min="1"
                       max="1440"
+                      step="1"
                       placeholder="No section timer"
                       value={section.durationMinutes}
                       onChange={(e) =>
@@ -582,36 +880,41 @@ export default function ExamExperience({
         {exam?.status === "running" && (
           <div className="exam-running">
             <div className="exam-toolbar">
-              <div className="exam-timer">
-                <Clock3 size={17} />
-                <span>Overall</span>
-                <strong
-                  className={
-                    overallRemaining !== null && overallRemaining < 300
-                      ? "urgent"
-                      : ""
-                  }
-                >
-                  {overallRemaining === null
-                    ? "No limit"
-                    : formatTime(overallRemaining)}
-                </strong>
-              </div>
-              <div className="exam-timer">
-                <Clock3 size={17} />
-                <span>{currentSection?.name || "Section"}</span>
-                <strong
-                  className={
-                    sectionRemaining !== null && sectionRemaining < 120
-                      ? "urgent"
-                      : ""
-                  }
-                >
-                  {sectionRemaining === null
-                    ? "No limit"
-                    : formatTime(sectionRemaining)}
-                </strong>
-              </div>
+              {sectionalTiming ? (
+                <div className="exam-timer">
+                  <Clock3 size={17} />
+                  {/* <span>
+                    {currentSection?.name || "Section"} · {currentSectionIndex + 1}/{exam.sections.length}
+                  </span> */}
+                  <strong
+                    className={
+                      sectionRemaining !== null && sectionRemaining < 120
+                        ? "urgent"
+                        : ""
+                    }
+                  >
+                    {sectionRemaining === null
+                      ? "No limit"
+                      : formatTime(sectionRemaining)}
+                  </strong>
+                </div>
+              ) : (
+                <div className="exam-timer">
+                  <Clock3 size={17} />
+                  {/* <span>Overall</span> */}
+                  <strong
+                    className={
+                      overallRemaining !== null && overallRemaining < 300
+                        ? "urgent"
+                        : ""
+                    }
+                  >
+                    {overallRemaining === null
+                      ? "No limit"
+                      : formatTime(overallRemaining)}
+                  </strong>
+                </div>
+              )}
               <button
                 className="button outline"
                 onClick={() => setConfirmSubmit(true)}
@@ -631,19 +934,20 @@ export default function ExamExperience({
         ${index === currentSectionIndex ? "active" : ""}
         ${section.locked ? "locked" : ""}
       `}
+                  disabled={sectionalTiming || section.locked}
                   onClick={() => {
                     const qid = section.questionIds[0];
                     if (qid && !section.locked) navigateTo(qid);
                   }}
                 >
                   {section.name}
-                  {section.locked ? " · Locked" : ""}
+                  {/* {section.locked ? " · Locked" : ""} */}
                 </button>
               ))}
             </nav>
             <div className="exam-workspace">
               <section className="exam-question-area">
-                <div className="exam-question-meta">
+                {/* <div className="exam-question-meta">
                   <span>
                     Question{" "}
                     {exam.questions.findIndex(
@@ -655,7 +959,7 @@ export default function ExamExperience({
                     {currentQuestion?.subject || "General"} ·{" "}
                     {currentQuestion?.topic || "Mixed topics"}
                   </span>
-                </div>
+                </div> */}
                 {currentSection?.locked && (
                   <div className="exam-locked-notice">
                     <AlertTriangle size={16} /> This section has expired and is
@@ -692,7 +996,7 @@ export default function ExamExperience({
                   {(currentQuestion?.options || []).map((option, index) => (
                     <button
                       key={index}
-                      disabled={currentSection?.locked}
+                      disabled={currentSection?.locked || currentSectionExpired}
                       className={`exam-option ${exam.answers[currentQuestion.id]?.answerIndex === index ? "selected" : ""}`}
                       onClick={() => updateAnswer(index)}
                     >
@@ -729,14 +1033,14 @@ export default function ExamExperience({
                 <div className="exam-question-actions">
                   <button
                     className="button outline"
-                    disabled={currentSection?.locked}
+                    disabled={currentSection?.locked || currentSectionExpired}
                     onClick={clearAnswer}
                   >
                     Clear response
                   </button>
                   <button
                     className={`button ${exam.answers[currentQuestion.id]?.marked ? "light" : "outline"}`}
-                    disabled={currentSection?.locked}
+                    disabled={currentSection?.locked || currentSectionExpired}
                     onClick={toggleReview}
                   >
                     <Flag size={14} />{" "}
@@ -747,26 +1051,15 @@ export default function ExamExperience({
                   <div className="exam-spacer" />
                   <button
                     className="button outline"
-                    onClick={() => {
-                      const i = exam.questions.findIndex(
-                        (q) => q.id === currentQuestion.id,
-                      );
-                      if (i > 0) navigateTo(exam.questions[i - 1].id);
-                    }}
-                    disabled={exam.questions[0]?.id === currentQuestion?.id}
+                    onClick={() => previousQuestionId && navigateTo(previousQuestionId)}
+                    disabled={!previousQuestionId || currentSection?.locked || currentSectionExpired}
                   >
                     Previous
                   </button>
                   <button
                     className="button primary"
-                    onClick={() => {
-                      const i = exam.questions.findIndex(
-                        (q) => q.id === currentQuestion.id,
-                      );
-                      if (i < exam.questions.length - 1)
-                        navigateTo(exam.questions[i + 1].id);
-                    }}
-                    disabled={exam.questions.at(-1)?.id === currentQuestion?.id}
+                    onClick={() => nextQuestionId && navigateTo(nextQuestionId)}
+                    disabled={!nextQuestionId || currentSection?.locked || currentSectionExpired}
                   >
                     Save & Next <ChevronRight size={15} />
                   </button>
@@ -795,11 +1088,11 @@ export default function ExamExperience({
                     const locked =
                       exam.sections[sectionByQuestion[q.id]]?.locked;
 
-                    const allowed =
-                      exam.config.sectionNavigation === "free" ||
-                      Math.abs(
-                        (sectionByQuestion[q.id] ?? 0) - currentSectionIndex,
-                      ) <= 1;
+                    const targetSectionIndex = sectionByQuestion[q.id] ?? 0;
+                    const allowed = sectionalTiming
+                      ? targetSectionIndex === currentSectionIndex
+                      : exam.config.sectionNavigation === "free" ||
+                        Math.abs(targetSectionIndex - currentSectionIndex) <= 1;
 
                     return (
                       <button
@@ -863,7 +1156,9 @@ export default function ExamExperience({
             <p>
               {exam.finishReason === "time"
                 ? "The overall timer expired. The exam was submitted automatically."
-                : "Your responses have been evaluated."}
+                : exam.finishReason === "section-time"
+                  ? "The final section timer expired. The exam was submitted automatically."
+                  : "Your responses have been evaluated."}
             </p>
             <div className="exam-result-score">
               <strong>{result.score.toFixed(2)}</strong>
