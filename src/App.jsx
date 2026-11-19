@@ -1,9 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
-import {
-  parseTcsIonResponseSheet,
-  sanitizeResponseRichHtml,
-} from "./responseSheetParser";
+import { parseTcsIonResponseSheet, sanitizeQuestionHtml } from "./responseSheetParser";
 import {
   db,
   initializeDatabase,
@@ -38,6 +35,8 @@ const PROGRESS_KEY = "rrb-je-pyq-progress-v1";
 const LABELS = ["A", "B", "C", "D"];
 const MAX_IMPORT_BYTES = 100 * 1024 * 1024; // CHANGED: prevent unexpectedly huge uploads.
 const MAX_QUESTIONS = 20000; // CHANGED: configurable import safety limit.
+// Configure this to the deployed Cloudflare Worker URL; direct browser fetches to Digialm are CORS-blocked.
+const RESPONSE_SHEET_FETCH_ENDPOINT = import.meta.env.VITE_RESPONSE_SHEET_FETCH_ENDPOINT || "";
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i;
 
 function loadProgress() {
@@ -338,48 +337,6 @@ function validateAndNormalizeBank(
   return normalized;
 }
 
-function RichHtml({ html, text = "", className = "", imageNode = null }) {
-  const safeHtml = sanitizeResponseRichHtml(html || "");
-  if (!safeHtml) return <div className={className}>{text}</div>;
-
-  const doc = new DOMParser().parseFromString(
-    `<body>${safeHtml}</body>`,
-    "text/html",
-  );
-  const renderNode = (node, key) => {
-    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue;
-    if (node.nodeType !== Node.ELEMENT_NODE) return null;
-    const tag = node.tagName.toLowerCase();
-    if (tag === "span" && node.getAttribute("data-pypa-image-slot")) {
-      return imageNode ? React.cloneElement(imageNode, { key }) : null;
-    }
-    const props = { key };
-    for (const attribute of Array.from(node.attributes)) {
-      const name =
-        attribute.name === "class"
-          ? "className"
-          : attribute.name === "colspan"
-            ? "colSpan"
-            : attribute.name === "rowspan"
-              ? "rowSpan"
-              : attribute.name;
-      props[name] = attribute.value;
-    }
-    const children = Array.from(node.childNodes).map((child, index) =>
-      renderNode(child, `${key}-${index}`),
-    );
-    return React.createElement(tag, props, ...children);
-  };
-
-  return (
-    <div className={className}>
-      {Array.from(doc.body.childNodes).map((node, index) =>
-        renderNode(node, `rich-${index}`),
-      )}
-    </div>
-  );
-}
-
 function App() {
   const [bank, setBank] = useState([]);
   const [progress, setProgress] = useState(loadProgress);
@@ -428,6 +385,7 @@ function App() {
   const [responseSheetUrl, setResponseSheetUrl] = useState("");
   const [responseSheetSourceLabel, setResponseSheetSourceLabel] = useState("");
   const [expandedQuestionId, setExpandedQuestionId] = useState(null);
+  const [marksPaperId, setMarksPaperId] = useState(null);
   const [responseSheetPaperId, setResponseSheetPaperId] = useState("");
   const [responseSheetPreview, setResponseSheetPreview] = useState(null);
   const [responseSheetError, setResponseSheetError] = useState("");
@@ -1196,7 +1154,6 @@ function App() {
   async function handleResponseSheetFileChange(event) {
     const file = event.target.files?.[0] || null;
     setResponseSheetFile(file);
-    setResponseSheetUrl("");
     setResponseSheetPreview(null);
     setResponseSheetHtml("");
     setResponseSheetSourceLabel("");
@@ -1219,23 +1176,25 @@ function App() {
       setResponseSheetSourceLabel(file.name);
       setResponseSheetPreview(parsed);
     } catch (error) {
-      setResponseSheetError(
-        error.message || "Could not read this response sheet.",
-      );
+      setResponseSheetError(error.message || "Could not read this response sheet.");
     } finally {
       event.target.value = "";
     }
   }
 
-  // Fetch a public response-sheet URL directly in the browser, then pass its HTML
-  // through the exact same parser used by the file-upload path.
+  // Fetch through a configured Worker, then pass the returned HTML to the same parser as file uploads.
   async function handleFetchResponseSheetUrl() {
     const rawUrl = responseSheetUrl.trim();
     if (!rawUrl) {
       setResponseSheetError("Paste the response-sheet URL first.");
       return;
     }
-
+    if (!RESPONSE_SHEET_FETCH_ENDPOINT) {
+      setResponseSheetError(
+        "URL import is not configured yet. Deploy responseSheetWorker.js and set VITE_RESPONSE_SHEET_FETCH_ENDPOINT in your Vite environment.",
+      );
+      return;
+    }
     let parsedUrl;
     try {
       parsedUrl = new URL(rawUrl);
@@ -1252,41 +1211,33 @@ function App() {
     setResponseSheetError("");
     setResponseSheetPreview(null);
     setResponseSheetHtml("");
-    setResponseSheetFile(null);
     try {
-      const response = await fetch(parsedUrl.href, {
-        method: "GET",
-        mode: "cors",
-        credentials: "omit",
-        headers: { Accept: "text/html,application/xhtml+xml" },
+      const response = await fetch(RESPONSE_SHEET_FETCH_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: parsedUrl.href }),
       });
-      if (!response.ok) {
-        throw new Error(`The URL returned HTTP ${response.status}.`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `URL fetch failed (${response.status}).`);
+      if (typeof payload.html !== "string" || !payload.html.trim()) {
+        throw new Error("The URL did not return a readable HTML response sheet.");
       }
-      const html = await response.text();
-      if (!html.trim()) throw new Error("The URL returned an empty response.");
-      if (new Blob([html]).size > MAX_IMPORT_BYTES) {
-        throw new Error("Response sheet exceeds the 100 MB import limit.");
+      if (new Blob([payload.html]).size > MAX_IMPORT_BYTES) {
+        throw new Error("Response sheet exceeds the 100 MB upload limit.");
       }
-      const sourceUrl = response.url || parsedUrl.href;
+      const sourceUrl = payload.finalUrl || parsedUrl.href;
       const imageOrigin = `${new URL(sourceUrl).origin}/`;
       const parsed = await parseTcsIonResponseSheet(
-        html,
+        payload.html,
         responseSheetPaperId.trim() || "response-sheet-preview",
         imageOrigin,
       );
-      setResponseSheetHtml(html);
-      setResponseSheetSourceLabel(sourceUrl);
+      setResponseSheetHtml(payload.html);
+      setResponseSheetFile(null);
+      setResponseSheetSourceLabel(payload.finalUrl || parsedUrl.href);
       setResponseSheetPreview(parsed);
     } catch (error) {
-      const message =
-        error?.message || "Could not fetch the response-sheet URL.";
-      const isCorsOrNetwork = error instanceof TypeError;
-      setResponseSheetError(
-        isCorsOrNetwork
-          ? "The browser could not read this URL. The page may be public but its server does not allow cross-origin (CORS) requests. Upload the saved HTML file instead; a proxy is only needed for URLs whose hosts block browser access."
-          : message,
-      );
+      setResponseSheetError(error.message || "Could not fetch the response sheet URL.");
     } finally {
       setDbBusy(false);
     }
@@ -1302,15 +1253,11 @@ function App() {
       return;
     }
     if (!responseSheetHtml) {
-      setResponseSheetError(
-        "Upload an HTML file or fetch a response-sheet URL first.",
-      );
+      setResponseSheetError("Upload an HTML file or fetch a response-sheet URL first.");
       return;
     }
     if (papers.some((id) => id.toLowerCase() === paperId.toLowerCase())) {
-      setResponseSheetError(
-        `Paper "${paperId}" already exists. Choose a unique Paper ID.`,
-      );
+      setResponseSheetError(`Paper "${paperId}" already exists. Choose a unique Paper ID.`);
       return;
     }
 
@@ -1327,11 +1274,7 @@ function App() {
       const imageOrigin = /^https:\/\//i.test(responseSheetSourceLabel)
         ? `${new URL(responseSheetSourceLabel).origin}/`
         : undefined;
-      const parsed = await parseTcsIonResponseSheet(
-        responseSheetHtml,
-        paperId,
-        imageOrigin,
-      );
+      const parsed = await parseTcsIonResponseSheet(responseSheetHtml, paperId, imageOrigin);
       const existing = await db.questions.toArray();
       const archivePaths = new Set(
         parsed.imageEntries.map((item) => normalizePath(item.path)),
@@ -1345,10 +1288,7 @@ function App() {
       // Keep parser-specific limitations visible; the generic normalizer cannot know
       // whether an image was externally linked or whether a cell mixed text and imagery.
       const issuesByNumber = new Map(
-        parsed.questionIssues.map((item) => [
-          item.questionNumber,
-          item.reasons,
-        ]),
+        parsed.questionIssues.map((item) => [item.questionNumber, item.reasons]),
       );
       const importQuestions = normalized.map((question) => {
         const parserIssues = issuesByNumber.get(question.questionNumber) || [];
@@ -1377,6 +1317,7 @@ function App() {
         examGroup: parsed.metadata.examGroup || "",
         positiveMarks: parsed.metadata.positiveMarks,
         negativeMarks: parsed.metadata.negativeMarks,
+        responseAnalytics: parsed.metadata.responseAnalytics,
       };
       await db.papers.put(metadataRecord);
 
@@ -1397,9 +1338,7 @@ function App() {
       setCoverageSearch("");
       setCoverageOpen(true);
 
-      const reviewCount = importQuestions.filter(
-        (q) => !isPracticeReady(q),
-      ).length;
+      const reviewCount = importQuestions.filter((q) => !isPracticeReady(q)).length;
       const importedImageCount = parsed.imageEntries.length;
       setDbMessage(
         `Imported ${importQuestions.length} question(s) into "${paperId}" with ${importedImageCount} embedded image(s). ${reviewCount ? `${reviewCount} question(s) need review.` : "All questions are practice-ready."}`,
@@ -1412,9 +1351,7 @@ function App() {
       setResponseSheetPreview(null);
       setResponseSheetPaperId("");
     } catch (error) {
-      setResponseSheetError(
-        error.message || "Could not import the response sheet.",
-      );
+      setResponseSheetError(error.message || "Could not import the response sheet.");
     } finally {
       setDbBusy(false);
     }
@@ -1788,6 +1725,7 @@ function App() {
     setEditingQuestionId(q.id);
     setEditDraft({
       question: q.question || "",
+      questionHtml: q.questionHtml || "",
       subject: q.subject || "",
       topic: q.topic || "",
 
@@ -1891,6 +1829,7 @@ function App() {
       ...q,
       notes: editDraft.note,
       question: editDraft.question,
+      questionHtml: sanitizeQuestionHtml(editDraft.questionHtml),
       subject: editDraft.subject.trim(),
       topic: editDraft.topic.trim(),
       options,
@@ -2048,7 +1987,7 @@ function App() {
     setSidebarOpen(false);
     setEditingQuestionId(null);
     setEditDraft(null);
-    setExpandedQuestionId((current) => (current === q.id ? null : q.id));
+    setExpandedQuestionId((current) => current === q.id ? null : q.id);
   }
 
   const attemptedQuestions = bank.filter(
@@ -2157,6 +2096,52 @@ function App() {
       papers.map((id) => {
         const qs = bank.filter((q) => q.paperId === id);
         const metadata = paperRecords.find((paper) => paper.id === id);
+        const sourceQuestions = qs.filter(
+          (q) => q.source?.provider === "TCS iON / Digialm" ||
+            q.source?.originalStatus !== undefined ||
+            q.source?.originalChosenOptionIndex !== undefined,
+        );
+        const responseAnalytics = metadata?.responseAnalytics || (
+          sourceQuestions.length
+            ? sourceQuestions.reduce((stats, question) => {
+                const chosen = question.source?.originalChosenOptionIndex;
+                if (!Number.isInteger(chosen) || chosen < 0 || chosen > 3) {
+                  stats.unattempted += 1;
+                } else {
+                  stats.attempted += 1;
+                  if (!Number.isInteger(question.correctAnswerIndex) || question.correctAnswerIndex < 0 || question.correctAnswerIndex > 3) {
+                    stats.notEvaluable += 1;
+                  } else if (chosen === question.correctAnswerIndex) {
+                    stats.correct += 1;
+                  } else {
+                    stats.wrong += 1;
+                  }
+                }
+                return stats;
+              }, {
+                total: sourceQuestions.length,
+                attempted: 0,
+                correct: 0,
+                wrong: 0,
+                unattempted: 0,
+                notEvaluable: 0,
+              })
+            : null
+        );
+        const positiveMarks = Number.isFinite(metadata?.positiveMarks) ? metadata.positiveMarks : null;
+        const negativeMarks = Number.isFinite(metadata?.negativeMarks) ? metadata.negativeMarks : null;
+        if (responseAnalytics && !metadata?.responseAnalytics) {
+          responseAnalytics.positiveMarks = positiveMarks;
+          responseAnalytics.negativeMarks = negativeMarks;
+          responseAnalytics.scoreAvailable = positiveMarks !== null && negativeMarks !== null;
+          responseAnalytics.marksAwarded = responseAnalytics.scoreAvailable
+            ? responseAnalytics.correct * positiveMarks - responseAnalytics.wrong * negativeMarks
+            : null;
+          responseAnalytics.maximumMarks = positiveMarks === null
+            ? null
+            : responseAnalytics.total * positiveMarks;
+          responseAnalytics.scoreComplete = responseAnalytics.scoreAvailable && responseAnalytics.notEvaluable === 0;
+        }
 
         return {
           id,
@@ -2168,6 +2153,9 @@ function App() {
           date: metadata?.date || "",
           shift: metadata?.shift || "",
           paperFile: metadata?.paperFile || "",
+          responseAnalytics,
+          positiveMarks,
+          negativeMarks,
         };
       }),
     [papers, bank, progress, paperRecords],
@@ -2178,21 +2166,13 @@ function App() {
     // Remote Digialm images remain source links; local uploads resolve through IndexedDB Blobs.
     if (/^https?:\/\//i.test(String(path || ""))) {
       return (
-        <a
-          href={path}
-          target="_blank"
-          rel="noreferrer"
-          className="source-image-link"
-          title="Open original image"
-        >
+        <a href={path} target="_blank" rel="noreferrer" className="source-image-link" title="Open original image">
           <img
             className={className}
             src={path}
             alt={alt}
             loading="lazy"
-            onError={(event) => {
-              event.currentTarget.hidden = true;
-            }}
+            onError={(event) => { event.currentTarget.hidden = true; }}
           />
           <span className="source-image-fallback">Open source image</span>
         </a>
@@ -2570,41 +2550,27 @@ function App() {
                       ? "Covered"
                       : "Uncovered"}
                   </span>
+                  {current.answerValidation === "source-key-verified" && (
+                    <span className="tag-covered">Key verified</span>
+                  )}
                   {current.answerValidation === "source-key-unverified" && (
                     <span className="tag-warning">Key unverified</span>
                   )}
                 </div>
-                <RichHtml
-                  className="question-text rich-question-content"
-                  html={current.questionHtml}
-                  text={
-                    current.question ||
-                    "Question text missing — review the source."
-                  }
-                  imageNode={
-                    current.questionImage
-                      ? renderImage(
-                          current.questionImage,
-                          `Question ${current.questionNumber}`,
-                          "question-image",
-                          current.paperId,
-                        )
-                      : null
-                  }
-                />
-                {current.questionImage &&
-                  !String(current.questionHtml || "").includes(
-                    "data-pypa-image-slot",
-                  ) && (
-                    <div className="source-image-wrap">
-                      {renderImage(
-                        current.questionImage,
-                        `Question ${current.questionNumber}`,
-                        "question-image",
-                        current.paperId,
-                      )}
-                    </div>
-                  )}
+                <div className="question-text">
+                  {current.question ||
+                    "Question text missing — review the source."}
+                </div>
+                {current.questionImage && (
+                  <div className="source-image-wrap">
+                    {renderImage(
+                      current.questionImage,
+                      `Question ${current.questionNumber}`,
+                      "question-image",
+                      current.paperId,
+                    )}
+                  </div>
+                )}
                 {current.reviewReasons?.length > 0 && (
                   <div className="alert">
                     <AlertTriangle size={16} />
@@ -2637,23 +2603,17 @@ function App() {
                             current.paperId,
                           )
                         ) : (
-                          <RichHtml
-                            className="rich-option-content"
-                            html={current.optionHtml?.[i]}
-                            text={
-                              option || "Option text missing — review required"
-                            }
-                            imageNode={
-                              current.optionImageSources?.[i]
-                                ? renderImage(
-                                    current.optionImageSources[i],
-                                    `Option ${LABELS[i]} image`,
-                                    "option-image",
-                                    current.paperId,
-                                  )
-                                : null
-                            }
-                          />
+                          <span>
+                            {option || (
+                              <em>Option text missing — review required</em>
+                            )}
+                            {current.optionImageSources?.[i] && renderImage(
+                              current.optionImageSources[i],
+                              `Option ${LABELS[i]} image`,
+                              "option-image",
+                              current.paperId,
+                            )}
+                          </span>
                         )}
                       </button>
                     );
@@ -2924,8 +2884,7 @@ function App() {
                   <div>
                     <h3>Import TCS iON / Digialm response sheet</h3>
                     <p>
-                      Import a saved HTML response sheet or fetch its page URL.
-                      Both inputs use the same TCS iON / Digialm parser.
+                      Import a saved HTML response sheet or fetch its page URL. Both inputs use the same TCS iON / Digialm parser.
                     </p>
                   </div>
                   <button
@@ -2955,53 +2914,37 @@ function App() {
                       placeholder="RRB-JE-2026-10-27-S1"
                       maxLength={80}
                     />
-                    <small>
-                      Unique ID used to identify this paper in PYPA.
-                    </small>
+                    <small>Unique ID used to identify this paper in PYPA.</small>
                   </label>
 
-                  {/* <label className="response-url-field"> 
+                  <label className="response-url-field">
                     Response-sheet URL
                     <input
                       type="url"
                       value={responseSheetUrl}
-                      onChange={(e) => {
-                        setResponseSheetUrl(e.target.value);
-                        setResponseSheetHtml("");
-                        setResponseSheetSourceLabel("");
-                        setResponseSheetPreview(null);
-                        setResponseSheetError("");
-                      }}
+                      onChange={(e) => setResponseSheetUrl(e.target.value)}
                       placeholder="https://rrb.digialm.com/..."
                       disabled={dbBusy}
-                    /> 
-                     <small>
-                      Paste a public HTTPS URL. Direct fetch works only if the
-                      host allows browser cross-origin (CORS) access.
-                    </small> 
+                    />
+                    <small>Paste the full response-sheet page URL. URL fetching requires the configured Worker endpoint.</small>
                     <button
                       type="button"
                       className="button outline"
                       onClick={handleFetchResponseSheetUrl}
                       disabled={dbBusy || !responseSheetUrl.trim()}
                     >
-                      <Download size={14} />{" "}
-                      {dbBusy ? "Fetching…" : "Fetch from URL"}
-                    </button> 
-                  </label> */}
-
+                      <Download size={14} /> {dbBusy ? "Fetching…" : "Fetch from URL"}
+                    </button>
+                  </label>
                   <label>
-                    HTML response sheet file
+                    HTML response sheet <span className="required-mark">*</span>
                     <input
                       type="file"
                       accept=".html,.htm,text/html"
                       onChange={handleResponseSheetFileChange}
                       disabled={dbBusy}
                     />
-                    <small>
-                      Optional if you fetched a public URL above. Upload a saved
-                      .html or .htm file instead.
-                    </small>
+                    <small>Upload a saved .html or .htm file, or use the URL field above.</small>
                   </label>
                 </div>
 
@@ -3031,28 +2974,18 @@ function App() {
 
                 {responseSheetPreview?.metadata && (
                   <p className="section-subtitle">
-                    <strong>
-                      {responseSheetPreview.metadata.examGroup ||
-                        "Exam group not detected"}
-                    </strong>
+                    <strong>{responseSheetPreview.metadata.examGroup || "Exam group not detected"}</strong>
                     {" · "}
-                    {responseSheetPreview.metadata.dateText ||
-                      "Date not detected"}
+                    {responseSheetPreview.metadata.dateText || "Date not detected"}
                     {" · "}
-                    {responseSheetPreview.metadata.shift ||
-                      "Shift not detected"}
+                    {responseSheetPreview.metadata.shift || "Shift not detected"}
                     {responseSheetSourceLabel && (
-                      <>
-                        {" "}
-                        {" · "}Source: {responseSheetSourceLabel}
-                      </>
+                      <> {" · "}Source: {responseSheetSourceLabel}</>
                     )}
                     {responseSheetPreview.questionIssues.length > 0 && (
                       <>
                         {" · "}
-                        {responseSheetPreview.questionIssues.length} question(s)
-                        contain structural issues and will be flagged for
-                        review.
+                        {responseSheetPreview.questionIssues.length} question(s) contain structural issues and will be flagged for review.
                       </>
                     )}
                   </p>
@@ -3062,14 +2995,9 @@ function App() {
                   <button
                     className="button primary"
                     onClick={handleImportResponseSheet}
-                    disabled={
-                      dbBusy ||
-                      !responseSheetHtml ||
-                      !responseSheetPaperId.trim()
-                    }
+                    disabled={dbBusy || !responseSheetHtml || !responseSheetPaperId.trim()}
                   >
-                    <Upload size={15} />{" "}
-                    {dbBusy ? "Importing…" : "Import questions"}
+                    <Upload size={15} /> {dbBusy ? "Importing…" : "Import questions"}
                   </button>
                   <button
                     className="button outline"
@@ -3089,13 +3017,7 @@ function App() {
                   </button>
                 </div>
                 <p className="fineprint">
-                  The parser supports the common TCS iON / Digialm
-                  response-sheet layout, including line breaks, superscripts,
-                  subscripts, basic formatting, and simple tables. Embedded
-                  images are stored locally; linked images remain as source
-                  URLs. Public URL fetching is attempted directly in your
-                  browser and depends on the source host allowing CORS. If it
-                  does not, upload the saved HTML file.
+                  The parser supports the common TCS iON / Digialm response-sheet layout. Embedded images are stored locally; linked Digialm images remain as full source URLs. Green official-answer markers are imported as source-key-verified. URL fetching uses a restricted server-side Worker because Digialm blocks direct browser requests with CORS.
                 </p>
               </div>
             )}
@@ -3586,6 +3508,19 @@ function App() {
                         <Plus size={13} /> Add questions
                       </button>
 
+                      {p.responseAnalytics && (
+                        <button
+                          className="button outline"
+                          type="button"
+                          onClick={() =>
+                            setMarksPaperId((current) => current === p.id ? null : p.id)
+                          }
+                          aria-expanded={marksPaperId === p.id}
+                        >
+                          {marksPaperId === p.id ? "Hide marks" : "View marks"}
+                        </button>
+                      )}
+
                       <button
                         className="button delete-paper-button"
                         disabled={dbBusy}
@@ -3594,6 +3529,41 @@ function App() {
                         Delete paper
                       </button>
                     </div>
+                    {marksPaperId === p.id && p.responseAnalytics && (
+                      <div className="paper-marks-panel">
+                        <strong>Original response-sheet result</strong>
+                        <div className="paper-marks-grid">
+                          <span><b>Attempted</b>{p.responseAnalytics.attempted}</span>
+                          <span><b>Correct</b>{p.responseAnalytics.correct}</span>
+                          <span><b>Wrong</b>{p.responseAnalytics.wrong}</span>
+                          <span><b>Unattempted</b>{p.responseAnalytics.unattempted}</span>
+                          {p.responseAnalytics.notEvaluable > 0 && (
+                            <span><b>Not evaluable</b>{p.responseAnalytics.notEvaluable}</span>
+                          )}
+                        </div>
+                        <div className="paper-marks-scheme">
+                          <span>Correct: +{p.positiveMarks ?? "N/A"}</span>
+                          <span>Incorrect: {p.negativeMarks === null ? "N/A" : `-${p.negativeMarks}`}</span>
+                        </div>
+                        {p.responseAnalytics.scoreAvailable ? (
+                          <p className="paper-marks-score">
+                            <b>{p.responseAnalytics.scoreComplete ? "Calculated marks" : "Partial calculated marks"}:</b>{" "}
+                            {Number(p.responseAnalytics.marksAwarded).toFixed(2)}
+                            {Number.isFinite(p.responseAnalytics.maximumMarks) && ` / ${Number(p.responseAnalytics.maximumMarks).toFixed(2)}`}
+                          </p>
+                        ) : (
+                          <p className="paper-marks-warning">
+                            Marking scheme was not detected. Correct/wrong counts are available, but marks cannot be calculated reliably.
+                          </p>
+                        )}
+                        {p.responseAnalytics.notEvaluable > 0 && (
+                          <p className="paper-marks-warning">
+                            {p.responseAnalytics.notEvaluable} attempted response(s) had no identifiable official answer. The displayed score excludes these responses and is incomplete.
+                          </p>
+                        )}
+                        <small>Based on the candidate's original responses in the imported HTML, not later PYPA practice attempts.</small>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -3694,7 +3664,6 @@ function App() {
                         return (
                           <div className="coverage-question" key={q.id}>
                             {editing && editDraft ? (
-                              // 1. EDIT MODE
                               <div className="question-edit-form">
                                 <label>
                                   Question {q.questionNumber} Text
@@ -3708,6 +3677,25 @@ function App() {
                                       }))
                                     }
                                   />
+                                </label>
+
+                                <label>
+                                  Question HTML (advanced formatting)
+                                  <textarea
+                                    rows={7}
+                                    spellCheck={false}
+                                    value={editDraft.questionHtml}
+                                    placeholder="Example: <p>Question with <strong>bold</strong> text</p>"
+                                    onChange={(e) =>
+                                      setEditDraft((previous) => ({
+                                        ...previous,
+                                        questionHtml: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                  <small>
+                                    Supports basic HTML formatting. Scripts, styles, embedded images and unsafe elements are removed when saved. Manage question images using the image controls below.
+                                  </small>
                                 </label>
 
                                 <label>
@@ -4155,188 +4143,7 @@ function App() {
                                   </button>
                                 </div>
                               </div>
-                            ) : expandedQuestionId === q.id ? (
-                              // 2. EXPANDED MODE
-                              <div className="question-detail-panel">
-                                <div className="question-detail-heading">
-                                  <strong>
-                                    Question {q.questionNumber} · Full details
-                                  </strong>
-                                  <button
-                                    type="button"
-                                    className="icon-button"
-                                    onClick={() => setExpandedQuestionId(null)}
-                                    aria-label="Close question details"
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                                <RichHtml
-                                  className="question-detail-stem rich-question-content"
-                                  html={q.questionHtml}
-                                  text={
-                                    q.question ||
-                                    "Question text is not available in the source."
-                                  }
-                                  imageNode={
-                                    q.questionImage
-                                      ? renderImage(
-                                          q.questionImage,
-                                          `Question ${q.questionNumber}`,
-                                          "question-image",
-                                          q.paperId,
-                                        )
-                                      : null
-                                  }
-                                />
-                                {q.questionImage &&
-                                  !String(q.questionHtml || "").includes(
-                                    "data-pypa-image-slot",
-                                  ) &&
-                                  renderImage(
-                                    q.questionImage,
-                                    `Question ${q.questionNumber}`,
-                                    "question-image",
-                                    q.paperId,
-                                  )}
-                                <div className="question-detail-options">
-                                  {(q.options || []).map(
-                                    (option, optionIndex) => {
-                                      const optionImage = isImagePath(option);
-                                      const extraImage =
-                                        q.optionImageSources?.[optionIndex];
-                                      return (
-                                        <div
-                                          className="question-detail-option"
-                                          key={`${q.id}-detail-${optionIndex}`}
-                                        >
-                                          <span className="option-label">
-                                            {LABELS[optionIndex]}
-                                          </span>
-                                          <div>
-                                            {optionImage ? (
-                                              renderImage(
-                                                option,
-                                                `Option ${LABELS[optionIndex]}`,
-                                                "option-image",
-                                                q.paperId,
-                                              )
-                                            ) : (
-                                              <RichHtml
-                                                className="rich-option-content"
-                                                html={
-                                                  q.optionHtml?.[optionIndex]
-                                                }
-                                                text={
-                                                  option || "Option unavailable"
-                                                }
-                                                imageNode={
-                                                  extraImage
-                                                    ? renderImage(
-                                                        extraImage,
-                                                        `Option ${LABELS[optionIndex]} image`,
-                                                        "option-image",
-                                                        q.paperId,
-                                                      )
-                                                    : null
-                                                }
-                                              />
-                                            )}
-                                            {extraImage &&
-                                              !String(
-                                                q.optionHtml?.[optionIndex] ||
-                                                  "",
-                                              ).includes(
-                                                "data-pypa-image-slot",
-                                              ) &&
-                                              renderImage(
-                                                extraImage,
-                                                `Option ${LABELS[optionIndex]} image`,
-                                                "option-image",
-                                                q.paperId,
-                                              )}
-                                          </div>
-                                          {q.correctAnswerIndex ===
-                                            optionIndex && (
-                                            <span className="detail-answer-tag">
-                                              Official answer
-                                            </span>
-                                          )}
-                                          {q.source
-                                            ?.originalChosenOptionIndex ===
-                                            optionIndex && (
-                                            <span className="detail-choice-tag">
-                                              Candidate selected
-                                            </span>
-                                          )}
-                                        </div>
-                                      );
-                                    },
-                                  )}
-                                </div>
-                                <div className="question-detail-meta">
-                                  <span>
-                                    <b>Subject:</b>{" "}
-                                    {q.subject || "Not provided"}
-                                  </span>
-                                  <span>
-                                    <b>Topic:</b> {q.topic || "Not provided"}
-                                  </span>
-                                  <span>
-                                    <b>Response status:</b>{" "}
-                                    {q.source?.originalStatus || "Not provided"}
-                                  </span>
-                                  <span>
-                                    <b>Candidate choice:</b>{" "}
-                                    {Number.isInteger(
-                                      q.source?.originalChosenOptionIndex,
-                                    )
-                                      ? LABELS[
-                                          q.source.originalChosenOptionIndex
-                                        ]
-                                      : "Not answered / not recorded"}
-                                  </span>
-                                  <span>
-                                    <b>Source question ID:</b>{" "}
-                                    {q.source?.questionId || "Not provided"}
-                                  </span>
-                                  <span>
-                                    <b>Answer key:</b>{" "}
-                                    {q.answerValidation ===
-                                    "source-key-verified"
-                                      ? "Verified from official green marker"
-                                      : "Not verified"}
-                                  </span>
-                                </div>
-                                {(q.notes || state.note) && (
-                                  <div className="question-detail-note">
-                                    <b>Note:</b> {q.notes || state.note}
-                                  </div>
-                                )}
-                                {q.reviewReasons?.length > 0 && (
-                                  <div className="alert">
-                                    <AlertTriangle size={15} />
-                                    <span>{q.reviewReasons.join("; ")}</span>
-                                  </div>
-                                )}
-                                <div className="button-row question-detail-actions">
-                                  <button
-                                    className="button primary"
-                                    onClick={() => startEditingQuestion(q)}
-                                    disabled={dbBusy}
-                                  >
-                                    Edit question
-                                  </button>
-                                  <button
-                                    className="button outline"
-                                    onClick={() => setExpandedQuestionId(null)}
-                                  >
-                                    Close details
-                                  </button>
-                                </div>
-                              </div>
                             ) : (
-                              // 3. NORMAL MODE
                               <>
                                 <div className="coverage-question-main">
                                   <span className="coverage-q-number">
@@ -4396,6 +4203,9 @@ function App() {
                                           Wrong attempt
                                         </span>
                                       )}
+                                      {q.answerValidation === "source-key-verified" && (
+                                        <span className="tag-covered">Key verified</span>
+                                      )}
                                       {q.answerValidation ===
                                         "source-key-unverified" && (
                                         <span className="tag-warning">
@@ -4425,10 +4235,78 @@ function App() {
                                 <button
                                   className="button outline coverage-open-button"
                                   onClick={() => openCoverageQuestion(q)}
-                                  aria-expanded={false}
+                                  aria-expanded={expandedQuestionId === q.id}
                                 >
-                                  Open
+                                  {expandedQuestionId === q.id ? "Close" : "Open"}
                                 </button>
+                                {expandedQuestionId === q.id && (
+                                  <div className="question-detail-panel">
+                                    <div className="question-detail-heading">
+                                      <strong>Question {q.questionNumber} · Full details</strong>
+                                      <button
+                                        type="button"
+                                        className="icon-button"
+                                        onClick={() => setExpandedQuestionId(null)}
+                                        aria-label="Close question details"
+                                      >
+                                        <X size={16} />
+                                      </button>
+                                    </div>
+                                    {q.questionHtml ? (
+                                      <div
+                                        className="question-detail-stem question-detail-rich-html"
+                                        dangerouslySetInnerHTML={{
+                                          __html: sanitizeQuestionHtml(q.questionHtml),
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="question-detail-stem">
+                                        {q.question || "Question text is not available in the source."}
+                                      </div>
+                                    )}
+                                    {q.questionImage && renderImage(
+                                      q.questionImage,
+                                      `Question ${q.questionNumber}`,
+                                      "question-image",
+                                      q.paperId,
+                                    )}
+                                    <div className="question-detail-options">
+                                      {(q.options || []).map((option, optionIndex) => {
+                                        const optionImage = isImagePath(option);
+                                        const extraImage = q.optionImageSources?.[optionIndex];
+                                        return (
+                                          <div className="question-detail-option" key={`${q.id}-detail-${optionIndex}`}>
+                                            <span className="option-label">{LABELS[optionIndex]}</span>
+                                            <div>
+                                              {optionImage ? renderImage(option, `Option ${LABELS[optionIndex]}`, "option-image", q.paperId) : <span>{option || "Option unavailable"}</span>}
+                                              {extraImage && renderImage(extraImage, `Option ${LABELS[optionIndex]} image`, "option-image", q.paperId)}
+                                            </div>
+                                            {q.correctAnswerIndex === optionIndex && <span className="detail-answer-tag">Official answer</span>}
+                                            {q.source?.originalChosenOptionIndex === optionIndex && <span className="detail-choice-tag">Candidate selected</span>}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    <div className="question-detail-meta">
+                                      <span><b>Subject:</b> {q.subject || "Not provided"}</span>
+                                      <span><b>Topic:</b> {q.topic || "Not provided"}</span>
+                                      <span><b>Response status:</b> {q.source?.originalStatus || "Not provided"}</span>
+                                      <span><b>Candidate choice:</b> {Number.isInteger(q.source?.originalChosenOptionIndex) ? LABELS[q.source.originalChosenOptionIndex] : "Not answered / not recorded"}</span>
+                                      <span><b>Source question ID:</b> {q.source?.questionId || "Not provided"}</span>
+                                      <span><b>Answer key:</b> {q.answerValidation === "source-key-verified" ? "Verified from official green marker" : "Not verified"}</span>
+                                    </div>
+                                    {(q.notes || state.note) && (
+                                      <div className="question-detail-note"><b>Note:</b> {q.notes || state.note}</div>
+                                    )}
+                                    {q.reviewReasons?.length > 0 && (
+                                      <div className="alert"><AlertTriangle size={15} /><span>{q.reviewReasons.join("; ")}</span></div>
+                                    )}
+                                    <div className="button-row question-detail-actions">
+                                      <button className="button primary" onClick={() => startEditingQuestion(q)} disabled={dbBusy}>Edit question</button>
+                                      <button className="button outline" onClick={() => setExpandedQuestionId(null)}>Close details</button>
+                                    </div>
+                                  </div>
+                                )}
                               </>
                             )}
                           </div>

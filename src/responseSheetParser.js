@@ -2,25 +2,22 @@ const RESPONSE_SHEET_IMAGE_ORIGIN = "https://rrb.digialm.com/";
 const IMAGE_DATA_URL = /^data:image\/(png|jpe?g|webp|gif|avif|bmp|svg\+xml);base64,/i;
 const IMAGE_EXTENSIONS = /\.(?:png|jpe?g|webp|gif|avif|bmp|svg)(?:[?#].*)?$/i;
 
-
-const SAFE_RICH_TAGS = new Set([
+// Keep formatting from imported question cells, but never retain executable HTML.
+const SAFE_QUESTION_TAGS = new Set([
   "br", "strong", "b", "em", "i", "u", "s", "del", "sup", "sub",
   "span", "p", "div", "table", "thead", "tbody", "tfoot", "tr", "td",
   "th", "ul", "ol", "li", "blockquote", "pre", "code",
 ]);
-const DROP_RICH_TAGS = new Set([
+const DROP_QUESTION_TAGS = new Set([
   "script", "style", "iframe", "object", "embed", "form", "input", "button",
   "textarea", "select", "option", "svg", "math", "video", "audio", "link",
   "meta", "base", "canvas",
 ]);
 
-/** Sanitize imported rich question HTML before it is stored or rendered. */
-export function sanitizeResponseRichHtml(value) {
+export function sanitizeQuestionHtml(value) {
   if (typeof value !== "string" || !value.trim()) return "";
   const parsed = new DOMParser().parseFromString(`<body>${value}</body>`, "text/html");
-  const body = parsed.body;
-
-  function clean(parent) {
+  const clean = (parent) => {
     for (const node of Array.from(parent.childNodes)) {
       if (node.nodeType === Node.COMMENT_NODE) {
         node.remove();
@@ -28,68 +25,34 @@ export function sanitizeResponseRichHtml(value) {
       }
       if (node.nodeType !== Node.ELEMENT_NODE) continue;
       const tag = node.tagName.toLowerCase();
-      if (tag === "img") {
-        // Image nodes are represented by a controlled slot and rendered through PYPA's image store.
-        const slot = node.getAttribute("data-pypa-image-slot");
-        if (slot) {
-          const placeholder = parsed.createElement("span");
-          placeholder.setAttribute("data-pypa-image-slot", slot);
-          node.replaceWith(placeholder);
-        } else {
-          node.remove();
-        }
-        continue;
-      }
-      if (DROP_RICH_TAGS.has(tag)) {
+      if (tag === "img" || DROP_QUESTION_TAGS.has(tag)) {
         node.remove();
         continue;
       }
-      if (!SAFE_RICH_TAGS.has(tag)) {
+      if (!SAFE_QUESTION_TAGS.has(tag)) {
         node.replaceWith(...Array.from(node.childNodes));
         continue;
       }
-
       for (const attribute of Array.from(node.attributes)) {
         const name = attribute.name.toLowerCase();
-        const allowed = name === "data-pypa-image-slot" && tag === "span" && /^(?:question|option-\d+)$/.test(attribute.value) ||
-          ((tag === "td" || tag === "th") && ["colspan", "rowspan", "align"].includes(name));
+        const allowed = (tag === "td" || tag === "th") &&
+          ["colspan", "rowspan", "align"].includes(name);
         if (!allowed) node.removeAttribute(attribute.name);
       }
-      if (tag === "table") node.setAttribute("class", "response-sheet-table");
-      if (tag === "td" || tag === "th") node.setAttribute("class", "response-sheet-cell");
       clean(node);
     }
-  }
-  clean(body);
-  return body.innerHTML;
+  };
+  clean(parsed.body);
+  return parsed.body.innerHTML;
 }
 
-function getCellRichHtml(cell, { imageSlot = "question", replaceImages = true, removeOptionNumber = false } = {}) {
+function getCellQuestionHtml(cell) {
   if (!cell) return "";
   const clone = cell.cloneNode(true);
-  clone.querySelectorAll("span[style*='color:#ffffff'], span[style*='color: #ffffff'], span[style*='color:white']")
+  clone.querySelectorAll("img").forEach((img) => img.remove());
+  clone.querySelectorAll("span[style*=\"color:#ffffff\"], span[style*=\"color: #ffffff\"], span[style*=\"color:white\"]")
     .forEach((span) => span.remove());
-  clone.querySelectorAll("img").forEach((img) => {
-    const src = (img.getAttribute("src") || "").toLowerCase();
-    if (img.classList.contains("tick") || /(?:tick|cross)\.png(?:[?#]|$)/.test(src)) {
-      img.remove();
-      return;
-    }
-    if (replaceImages) {
-      const placeholder = clone.ownerDocument.createElement("span");
-      placeholder.setAttribute("data-pypa-image-slot", imageSlot);
-      img.replaceWith(placeholder);
-    } else {
-      img.remove();
-    }
-  });
-  if (removeOptionNumber) {
-    const walker = clone.ownerDocument.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
-    let firstTextNode = walker.nextNode();
-    while (firstTextNode && !firstTextNode.nodeValue.trim()) firstTextNode = walker.nextNode();
-    if (firstTextNode) firstTextNode.nodeValue = firstTextNode.nodeValue.replace(/^\s*\d+\s*[.)]\s*/, "");
-  }
-  return sanitizeResponseRichHtml(clone.innerHTML);
+  return sanitizeQuestionHtml(clone.innerHTML);
 }
 
 function cleanText(value) {
@@ -121,7 +84,9 @@ function extensionForMime(mime) {
 }
 
 function parseMarkValue(value) {
-  const match = String(value || "").match(/(-?\d+(?:\.\d+)?)\s*(?:\/\s*(\d+(?:\.\d+)?))?/);
+  const text = String(value || "").trim();
+  if (/\b(no|zero|nil)\s+(?:negative\s+)?(?:marking|marks?)\b/i.test(text)) return 0;
+  const match = text.match(/(-?\d+(?:\.\d+)?)\s*(?:\/\s*(\d+(?:\.\d+)?))?/);
   if (!match) return null;
   const numerator = Number(match[1]);
   const denominator = match[2] ? Number(match[2]) : 1;
@@ -132,17 +97,14 @@ function parseMarkValue(value) {
 // Find the Q-number cell itself instead of assuming the first <tr> is the question row.
 function getQuestionCells(questionElement) {
   const table = questionElement.querySelector(".questionRowTbl");
-  if (!table) return { questionCell: null, numberCell: null, optionRows: [] };
+  if (!table) return { questionCell: null, optionRows: [] };
 
-  const numberCell = Array.from(table.querySelectorAll("tr > td")).find((cell) =>
-    /^Q\.?\s*\d+$/i.test(cleanText(cell.textContent)),
-  ) || null;
-  const questionCell = numberCell?.parentElement
-    ? Array.from(numberCell.parentElement.children).find((cell) => cell.tagName === "TD" && cell !== numberCell) || null
-    : null;
+  const cells = Array.from(table.querySelectorAll("td"));
+  const numberCellIndex = cells.findIndex((cell) => /^Q\.?\s*\d+$/i.test(cleanText(cell.textContent)));
+  const questionCell = numberCellIndex >= 0 ? cells[numberCellIndex + 1] || null : null;
   return {
     questionCell,
-    numberCell,
+    numberCell: numberCellIndex >= 0 ? cells[numberCellIndex] : null,
     optionRows: Array.from(table.querySelectorAll(".rightAns, .wrngAns")),
   };
 }
@@ -203,8 +165,9 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
   const dateText = getLabelValue(infoText, /Test\s*Date\s*(\d{2}\/\d{2}\/\d{4})/i);
   const time = getLabelValue(infoText, /Test\s*Time\s*([\d:]+\s*[AP]M\s*-\s*[\d:]+\s*[AP]M)/i);
   const markSchemeText = infoText.match(/Correct Answer will carry\s*([^.]+)\.\s*Incorrect Answer will carry\s*([^.]+)\./i);
-  const positiveMarks = markSchemeText ? parseMarkValue(markSchemeText[1]) : null;
-  const negativeMarks = markSchemeText ? Math.abs(parseMarkValue(markSchemeText[2])) : null;
+  const positiveMarks = markSchemeText ? parseMarkValue(markSchemeText[1]) : 1;
+  const parsedNegativeMarks = markSchemeText ? parseMarkValue(markSchemeText[2]) : 0.25;
+  const negativeMarks = parsedNegativeMarks === null ? 0.25 : Math.abs(parsedNegativeMarks);
   const parsedDate = parseExamDate(dateText);
 
   const imageEntries = [];
@@ -239,6 +202,7 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
     if (optionRows.length !== 4) localIssues.push(`Expected four options but found ${optionRows.length}`);
 
     const questionText = getCellTextWithoutImages(questionCell);
+    const questionHtml = getCellQuestionHtml(questionCell);
     const questionImages = getNonMarkerImages(questionCell);
     let questionImage = null;
     if (questionImages.length > 1) {
@@ -248,16 +212,13 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
       questionImage = stored.path;
       if (stored.issue) localIssues.push(stored.issue);
     }
-    const questionHtml = getCellRichHtml(questionCell, { imageSlot: "question" });
 
     const options = [];
-    const optionHtml = [];
     const optionImageSources = [];
     for (let optionIndex = 0; optionIndex < 4; optionIndex++) {
       const optionRow = optionRows[optionIndex];
       if (!optionRow) {
         options.push("");
-        optionHtml.push("");
         optionImageSources.push("");
         continue;
       }
@@ -266,12 +227,10 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
       if (optionImages.length > 1) {
         localIssues.push(`Option ${optionIndex + 1} contains multiple images; the current PYPA option format supports one image`);
         options.push(optionText);
-        optionHtml.push(getCellRichHtml(optionRow, { imageSlot: `option-${optionIndex + 1}`, removeOptionNumber: true }));
         optionImageSources.push("");
       } else if (optionImages.length === 1 && !optionText) {
         const stored = await storeImage(optionImages[0], questionNumber, `option-${optionIndex + 1}`);
         options.push(stored.path || "");
-        optionHtml.push("");
         optionImageSources.push("");
         if (stored.issue) localIssues.push(`Option ${optionIndex + 1}: ${stored.issue}`);
       } else if (optionImages.length === 1 && optionText) {
@@ -279,12 +238,10 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
         // separately as optional source metadata so the view can display both.
         const stored = await storeImage(optionImages[0], questionNumber, `option-${optionIndex + 1}`);
         options.push(optionText);
-        optionHtml.push(getCellRichHtml(optionRow, { imageSlot: `option-${optionIndex + 1}`, removeOptionNumber: true }));
         optionImageSources.push(stored.path || "");
         if (stored.issue) localIssues.push(`Option ${optionIndex + 1}: ${stored.issue}`);
       } else {
         options.push(optionText);
-        optionHtml.push(getCellRichHtml(optionRow, { imageSlot: `option-${optionIndex + 1}`, removeOptionNumber: true }));
         optionImageSources.push("");
       }
     }
@@ -297,20 +254,16 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
     const menuText = cleanText(element.querySelector(".menu-tbl")?.textContent || "");
     const questionId = menuText.match(/Question\s*ID\s*:\s*(\d+)/i)?.[1] || "";
     const chosenOptionMatch = menuText.match(/Chosen\s*Option\s*:\s*(\d+)/i);
+    const chosenOptionNumber = chosenOptionMatch ? Number(chosenOptionMatch[1]) : null;
+    const originalChosenOptionIndex = Number.isInteger(chosenOptionNumber) && chosenOptionNumber >= 1 && chosenOptionNumber <= 4
+      ? chosenOptionNumber - 1
+      : null;
     const status = menuText.match(/Status\s*:\s*([\s\S]*?)(?:Chosen\s*Option\s*:|$)/i)?.[1] || "";
 
     // Image-only prompts still need a non-empty stem in PYPA's current text-first schema.
     const question = questionText || (questionImage ? "Image-based question — inspect the attached image." : "");
-    const sectionLabel = cleanText(
-      element.closest(".section-cntnr")?.querySelector(":scope > .section-lbl")?.textContent ||
-      element.closest(".section-cntnr")?.querySelector(".section-lbl")?.textContent ||
-      "",
-    ).replace(/^Section\s*:\s*/i, "");
-    // Use a real section label as the topic when the source provides one; otherwise
-    // do not invent a per-question topic that is absent from the response sheet.
-    const subject = sectionLabel || examGroup || "General";
-
-    const topic = "Mixed topics";
+    const subject = examGroup || "General";
+    const topic = "Mixed topics (section-wide; source has no per-question topic)";
 
     questions.push({
       id: `${paperId}-Q${String(questionNumber).padStart(3, "0")}`,
@@ -324,7 +277,6 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
       subject,
       topic,
       options,
-      optionHtml,
       optionImageSources,
       correctAnswerIndex: correctAnswerIndex >= 0 ? correctAnswerIndex : null,
       correctAnswer: correctAnswerIndex >= 0 ? options[correctAnswerIndex] || "" : "",
@@ -341,12 +293,38 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
         provider: "TCS iON / Digialm",
         questionId,
         originalStatus: cleanText(status),
-        originalChosenOptionIndex: chosenOptionMatch ? Number(chosenOptionMatch[1]) - 1 : null,
+        originalChosenOptionIndex,
       },
     });
 
     if (localIssues.length) questionIssues.push({ questionNumber, reasons: localIssues });
   }
+
+  const responseAnalytics = questions.reduce((stats, question) => {
+    const chosen = question.source?.originalChosenOptionIndex;
+    if (!Number.isInteger(chosen) || chosen < 0 || chosen > 3) {
+      stats.unattempted += 1;
+      return stats;
+    }
+
+    stats.attempted += 1;
+    if (!Number.isInteger(question.correctAnswerIndex) || question.correctAnswerIndex < 0 || question.correctAnswerIndex > 3) {
+      stats.notEvaluable += 1;
+    } else if (chosen === question.correctAnswerIndex) {
+      stats.correct += 1;
+    } else {
+      stats.wrong += 1;
+    }
+    return stats;
+  }, { total: questions.length, attempted: 0, correct: 0, wrong: 0, unattempted: 0, notEvaluable: 0 });
+
+  const scoreAvailable = Number.isFinite(positiveMarks) && Number.isFinite(negativeMarks);
+  const marksAwarded = scoreAvailable
+    ? responseAnalytics.correct * positiveMarks - responseAnalytics.wrong * negativeMarks
+    : null;
+  const maximumMarks = Number.isFinite(positiveMarks)
+    ? questions.length * positiveMarks
+    : null;
 
   return {
     questions,
@@ -359,6 +337,15 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
       positiveMarks: Number.isFinite(positiveMarks) ? positiveMarks : null,
       negativeMarks: Number.isFinite(negativeMarks) ? negativeMarks : null,
       totalQuestions: questions.length,
+      responseAnalytics: {
+        ...responseAnalytics,
+        positiveMarks: Number.isFinite(positiveMarks) ? positiveMarks : null,
+        negativeMarks: Number.isFinite(negativeMarks) ? negativeMarks : null,
+        marksAwarded,
+        maximumMarks,
+        scoreAvailable,
+        scoreComplete: scoreAvailable && responseAnalytics.notEvaluable === 0,
+      },
     },
     questionIssues,
   };
