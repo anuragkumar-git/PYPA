@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
+import ExamExperience from "./ExamExperience.jsx";
 import {
   parseTcsIonResponseSheet,
   sanitizeQuestionHtml,
@@ -32,6 +33,7 @@ import {
   Plus,
   Tags,
   Save,
+  Clock3,
 } from "lucide-react";
 
 const PROGRESS_KEY = "rrb-je-pyq-progress-v1";
@@ -374,6 +376,7 @@ function App() {
   // Paper metadata is stored separately from questions.
   // This allows a paper with zero questions to appear in coverage.
   const [paperRecords, setPaperRecords] = useState([]);
+  const [examOpen, setExamOpen] = useState(false);
 
   // Master subject/topic list stored in IndexedDB.
   const [categoryRecords, setCategoryRecords] = useState([]);
@@ -671,6 +674,12 @@ function App() {
   useEffect(() => {
     setNoteDraft(currentState?.note || current?.notes || "");
   }, [current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function savePaperExamSettings(paperId, examSettings) {
+    const existing = await db.papers.get(paperId);
+    await db.papers.put({ ...(existing || { id: paperId }), examSettings });
+    setPaperRecords(await db.papers.toArray());
+  }
 
   function startSession(forceShuffle = false) {
     setSessionError("");
@@ -2425,6 +2434,14 @@ function App() {
               <Shuffle size={16} />
             </button>
           </div>
+          <button
+            className="button primary full exam-launch-button"
+            onClick={() => setExamOpen(true)}
+            disabled={!bank.some((q) => q.practiceReady && !q.visualReviewNeeded && Number.isInteger(q.correctAnswerIndex))}
+          >
+            <Clock3 size={15} /> Exam simulation
+          </button>
+          <p className="fineprint">Timed exam mode with section controls, question palette and deferred scoring.</p>
           <div className="separator" />
           <h2>Overall coverage</h2>
           <div className="stats">
@@ -4583,6 +4600,15 @@ function App() {
           </section>
         </section>
       </main>
+      {examOpen && (
+        <ExamExperience
+          questions={bank}
+          papers={paperRecords}
+          imageUrls={imageUrls}
+          onSavePaperSettings={savePaperExamSettings}
+          onClose={() => setExamOpen(false)}
+        />
+      )}
       <footer>
         PYQ Tracker · Local-first · Missing or incomplete questions remain
         visible for review and are excluded from practice.
