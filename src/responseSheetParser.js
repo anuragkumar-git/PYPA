@@ -262,8 +262,17 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
 
     // Image-only prompts still need a non-empty stem in PYPA's current text-first schema.
     const question = questionText || (questionImage ? "Image-based question — inspect the attached image." : "");
-    const subject = examGroup || "General";
-    const topic = "Mixed topics (section-wide; source has no per-question topic)";
+    const sectionLabel = cleanText(
+      element.closest(".section-cntnr")?.querySelector(":scope > .section-lbl")?.textContent ||
+      element.closest(".section-cntnr")?.querySelector(".section-lbl")?.textContent ||
+      "",
+    ).replace(/^Section\s*:\s*/i, "");
+
+    // Section label becomes subject; fall back if unavailable.
+    const subject = sectionLabel || examGroup || "General";
+
+    // Always use Mixed topics.
+    const topic = "Mixed topics";
 
     questions.push({
       id: `${paperId}-Q${String(questionNumber).padStart(3, "0")}`,
