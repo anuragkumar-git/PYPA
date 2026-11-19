@@ -2618,9 +2618,6 @@ function App() {
                       ? "Covered"
                       : "Uncovered"}
                   </span>
-                  {current.answerValidation === "source-key-verified" && (
-                    <span className="tag-covered">Key verified</span>
-                  )}
                   {current.answerValidation === "source-key-unverified" && (
                     <span className="tag-warning">Key unverified</span>
                   )}
@@ -3803,6 +3800,7 @@ function App() {
                         return (
                           <div className="coverage-question" key={q.id}>
                             {editing && editDraft ? (
+                              // 1. EDIT MODE
                               <div className="question-edit-form">
                                 <label>
                                   Question {q.questionNumber} Text
@@ -4285,7 +4283,160 @@ function App() {
                                   </button>
                                 </div>
                               </div>
+                            ) : expandedQuestionId === q.id ? (
+                              // 2. EXPANDED MODE
+                              <div className="question-detail-panel">
+                                <div className="question-detail-heading">
+                                  <strong>
+                                    Question {q.questionNumber} · Full details
+                                  </strong>
+                                  <button
+                                    type="button"
+                                    className="icon-button"
+                                    onClick={() => setExpandedQuestionId(null)}
+                                    aria-label="Close question details"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                                {q.questionHtml ? (
+                                  <div
+                                    className="question-detail-stem question-detail-rich-html"
+                                    dangerouslySetInnerHTML={{
+                                      __html: sanitizeQuestionHtml(
+                                        q.questionHtml,
+                                      ),
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="question-detail-stem">
+                                    {q.question ||
+                                      "Question text is not available in the source."}
+                                  </div>
+                                )}
+                                {q.questionImage &&
+                                  renderImage(
+                                    q.questionImage,
+                                    `Question ${q.questionNumber}`,
+                                    "question-image",
+                                    q.paperId,
+                                  )}
+                                <div className="question-detail-options">
+                                  {(q.options || []).map(
+                                    (option, optionIndex) => {
+                                      const optionImage = isImagePath(option);
+                                      const extraImage =
+                                        q.optionImageSources?.[optionIndex];
+                                      return (
+                                        <div
+                                          className="question-detail-option"
+                                          key={`${q.id}-detail-${optionIndex}`}
+                                        >
+                                          <span className="option-label">
+                                            {LABELS[optionIndex]}
+                                          </span>
+                                          <div>
+                                            {optionImage ? (
+                                              renderImage(
+                                                option,
+                                                `Option ${LABELS[optionIndex]}`,
+                                                "option-image",
+                                                q.paperId,
+                                              )
+                                            ) : (
+                                              <span>
+                                                {option || "Option unavailable"}
+                                              </span>
+                                            )}
+                                            {extraImage &&
+                                              renderImage(
+                                                extraImage,
+                                                `Option ${LABELS[optionIndex]} image`,
+                                                "option-image",
+                                                q.paperId,
+                                              )}
+                                          </div>
+                                          {q.correctAnswerIndex ===
+                                            optionIndex && (
+                                            <span className="detail-answer-tag">
+                                              Official answer
+                                            </span>
+                                          )}
+                                          {q.source
+                                            ?.originalChosenOptionIndex ===
+                                            optionIndex && (
+                                            <span className="detail-choice-tag">
+                                              Candidate selected
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    },
+                                  )}
+                                </div>
+                                <div className="question-detail-meta">
+                                  <span>
+                                    <b>Subject:</b>{" "}
+                                    {q.subject || "Not provided"}
+                                  </span>
+                                  <span>
+                                    <b>Topic:</b> {q.topic || "Not provided"}
+                                  </span>
+                                  <span>
+                                    <b>Response status:</b>{" "}
+                                    {q.source?.originalStatus || "Not provided"}
+                                  </span>
+                                  <span>
+                                    <b>Candidate choice:</b>{" "}
+                                    {Number.isInteger(
+                                      q.source?.originalChosenOptionIndex,
+                                    )
+                                      ? LABELS[
+                                          q.source.originalChosenOptionIndex
+                                        ]
+                                      : "Not answered / not recorded"}
+                                  </span>
+                                  <span>
+                                    <b>Source question ID:</b>{" "}
+                                    {q.source?.questionId || "Not provided"}
+                                  </span>
+                                  <span>
+                                    <b>Answer key:</b>{" "}
+                                    {q.answerValidation ===
+                                    "source-key-verified"
+                                      ? "Verified from official green marker"
+                                      : "Not verified"}
+                                  </span>
+                                </div>
+                                {(q.notes || state.note) && (
+                                  <div className="question-detail-note">
+                                    <b>Note:</b> {q.notes || state.note}
+                                  </div>
+                                )}
+                                {q.reviewReasons?.length > 0 && (
+                                  <div className="alert">
+                                    <AlertTriangle size={15} />
+                                    <span>{q.reviewReasons.join("; ")}</span>
+                                  </div>
+                                )}
+                                <div className="button-row question-detail-actions">
+                                  <button
+                                    className="button primary"
+                                    onClick={() => startEditingQuestion(q)}
+                                    disabled={dbBusy}
+                                  >
+                                    Edit question
+                                  </button>
+                                  <button
+                                    className="button outline"
+                                    onClick={() => setExpandedQuestionId(null)}
+                                  >
+                                    Close details
+                                  </button>
+                                </div>
+                              </div>
                             ) : (
+                              // 3. NORMAL MODE
                               <>
                                 <div className="coverage-question-main">
                                   <span className="coverage-q-number">
@@ -4380,175 +4531,10 @@ function App() {
                                 <button
                                   className="button outline coverage-open-button"
                                   onClick={() => openCoverageQuestion(q)}
-                                  aria-expanded={expandedQuestionId === q.id}
+                                  aria-expanded={false}
                                 >
-                                  {expandedQuestionId === q.id
-                                    ? "Close"
-                                    : "Open"}
+                                  Open
                                 </button>
-                                {expandedQuestionId === q.id && (
-                                  <div className="question-detail-panel">
-                                    <div className="question-detail-heading">
-                                      <strong>
-                                        Question {q.questionNumber} · Full
-                                        details
-                                      </strong>
-                                      <button
-                                        type="button"
-                                        className="icon-button"
-                                        onClick={() =>
-                                          setExpandedQuestionId(null)
-                                        }
-                                        aria-label="Close question details"
-                                      >
-                                        <X size={16} />
-                                      </button>
-                                    </div>
-                                    {q.questionHtml ? (
-                                      <div
-                                        className="question-detail-stem question-detail-rich-html"
-                                        dangerouslySetInnerHTML={{
-                                          __html: sanitizeQuestionHtml(
-                                            q.questionHtml,
-                                          ),
-                                        }}
-                                      />
-                                    ) : (
-                                      <div className="question-detail-stem">
-                                        {q.question ||
-                                          "Question text is not available in the source."}
-                                      </div>
-                                    )}
-                                    {q.questionImage &&
-                                      renderImage(
-                                        q.questionImage,
-                                        `Question ${q.questionNumber}`,
-                                        "question-image",
-                                        q.paperId,
-                                      )}
-                                    <div className="question-detail-options">
-                                      {(q.options || []).map(
-                                        (option, optionIndex) => {
-                                          const optionImage =
-                                            isImagePath(option);
-                                          const extraImage =
-                                            q.optionImageSources?.[optionIndex];
-                                          return (
-                                            <div
-                                              className="question-detail-option"
-                                              key={`${q.id}-detail-${optionIndex}`}
-                                            >
-                                              <span className="option-label">
-                                                {LABELS[optionIndex]}
-                                              </span>
-                                              <div>
-                                                {optionImage ? (
-                                                  renderImage(
-                                                    option,
-                                                    `Option ${LABELS[optionIndex]}`,
-                                                    "option-image",
-                                                    q.paperId,
-                                                  )
-                                                ) : (
-                                                  <span>
-                                                    {option ||
-                                                      "Option unavailable"}
-                                                  </span>
-                                                )}
-                                                {extraImage &&
-                                                  renderImage(
-                                                    extraImage,
-                                                    `Option ${LABELS[optionIndex]} image`,
-                                                    "option-image",
-                                                    q.paperId,
-                                                  )}
-                                              </div>
-                                              {q.correctAnswerIndex ===
-                                                optionIndex && (
-                                                <span className="detail-answer-tag">
-                                                  Official answer
-                                                </span>
-                                              )}
-                                              {q.source
-                                                ?.originalChosenOptionIndex ===
-                                                optionIndex && (
-                                                <span className="detail-choice-tag">
-                                                  Candidate selected
-                                                </span>
-                                              )}
-                                            </div>
-                                          );
-                                        },
-                                      )}
-                                    </div>
-                                    <div className="question-detail-meta">
-                                      <span>
-                                        <b>Subject:</b>{" "}
-                                        {q.subject || "Not provided"}
-                                      </span>
-                                      <span>
-                                        <b>Topic:</b>{" "}
-                                        {q.topic || "Not provided"}
-                                      </span>
-                                      <span>
-                                        <b>Response status:</b>{" "}
-                                        {q.source?.originalStatus ||
-                                          "Not provided"}
-                                      </span>
-                                      <span>
-                                        <b>Candidate choice:</b>{" "}
-                                        {Number.isInteger(
-                                          q.source?.originalChosenOptionIndex,
-                                        )
-                                          ? LABELS[
-                                              q.source.originalChosenOptionIndex
-                                            ]
-                                          : "Not answered / not recorded"}
-                                      </span>
-                                      <span>
-                                        <b>Source question ID:</b>{" "}
-                                        {q.source?.questionId || "Not provided"}
-                                      </span>
-                                      <span>
-                                        <b>Answer key:</b>{" "}
-                                        {q.answerValidation ===
-                                        "source-key-verified"
-                                          ? "Verified from official green marker"
-                                          : "Not verified"}
-                                      </span>
-                                    </div>
-                                    {(q.notes || state.note) && (
-                                      <div className="question-detail-note">
-                                        <b>Note:</b> {q.notes || state.note}
-                                      </div>
-                                    )}
-                                    {q.reviewReasons?.length > 0 && (
-                                      <div className="alert">
-                                        <AlertTriangle size={15} />
-                                        <span>
-                                          {q.reviewReasons.join("; ")}
-                                        </span>
-                                      </div>
-                                    )}
-                                    <div className="button-row question-detail-actions">
-                                      <button
-                                        className="button primary"
-                                        onClick={() => startEditingQuestion(q)}
-                                        disabled={dbBusy}
-                                      >
-                                        Edit question
-                                      </button>
-                                      <button
-                                        className="button outline"
-                                        onClick={() =>
-                                          setExpandedQuestionId(null)
-                                        }
-                                      >
-                                        Close details
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
                               </>
                             )}
                           </div>
