@@ -2158,3 +2158,28 @@ footer {
     flex: 1;
   }
 }
+
+/* Fix: mobile exam setup and scrolling */
+@media (max-width: 850px) {
+  .exam-overlay {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .exam-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  /* Let the overlay handle scrolling instead of creating
+     an unbounded nested scroll container. */
+  .exam-setup {
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+    overflow-y: visible;
+    padding-bottom: calc(38px + env(safe-area-inset-bottom));
+  }
+}
