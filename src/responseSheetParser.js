@@ -55,6 +55,26 @@ function getCellQuestionHtml(cell) {
   return sanitizeQuestionHtml(clone.innerHTML);
 }
 
+function getComprehensionCell(element) {
+  if (!element) return null;
+
+  const marker = Array.from(
+    element.querySelectorAll("b, strong")
+  ).find((node) =>
+    /^Comprehension\s*:/i.test(cleanText(node.textContent))
+  );
+
+  if (!marker) return null;
+
+  const labelCell = marker.closest("td");
+  const labelRow = labelCell?.closest("tr");
+  const passageRow = labelRow?.nextElementSibling;
+
+  return passageRow?.querySelector("td[colspan]") ||
+    passageRow?.querySelector("td") ||
+    null;
+}
+
 function cleanText(value) {
   return String(value || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -97,15 +117,30 @@ function parseMarkValue(value) {
 // Find the Q-number cell itself instead of assuming the first <tr> is the question row.
 function getQuestionCells(questionElement) {
   const table = questionElement.querySelector(".questionRowTbl");
-  if (!table) return { questionCell: null, optionRows: [] };
+
+  if (!table) {
+    return {
+      questionCell: null,
+      numberCell: null,
+      optionRows: [],
+      comprehensionCell: null,
+    };
+  }
 
   const cells = Array.from(table.querySelectorAll("td"));
-  const numberCellIndex = cells.findIndex((cell) => /^Q\.?\s*\d+$/i.test(cleanText(cell.textContent)));
-  const questionCell = numberCellIndex >= 0 ? cells[numberCellIndex + 1] || null : null;
+
+  const numberCellIndex = cells.findIndex((cell) =>
+    /^Q\.?\s*\d+$/i.test(cleanText(cell.textContent)),
+  );
+
+  const questionCell =
+    numberCellIndex >= 0 ? cells[numberCellIndex + 1] || null : null;
+
   return {
     questionCell,
     numberCell: numberCellIndex >= 0 ? cells[numberCellIndex] : null,
     optionRows: Array.from(table.querySelectorAll(".rightAns, .wrngAns")),
+    comprehensionCell: getComprehensionCell(questionElement),
   };
 }
 
@@ -194,24 +229,63 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
 
   for (let index = 0; index < questionElements.length; index++) {
     const element = questionElements[index];
-    const { questionCell, numberCell, optionRows } = getQuestionCells(element);
+    const { questionCell, numberCell, optionRows, comprehensionCell, } = getQuestionCells(element);
     const numberMatch = cleanText(numberCell?.textContent).match(/Q\.?\s*(\d+)/i);
     const questionNumber = numberMatch ? Number(numberMatch[1]) : index + 1;
     const localIssues = [];
 
     if (optionRows.length !== 4) localIssues.push(`Expected four options but found ${optionRows.length}`);
 
+    const comprehensionText = comprehensionCell
+      ? getCellTextWithoutImages(comprehensionCell).trim()
+      : "";
+
     const questionText = getCellTextWithoutImages(questionCell);
-    const questionHtml = getCellQuestionHtml(questionCell);
-    const questionImages = getNonMarkerImages(questionCell);
-    let questionImage = null;
-    if (questionImages.length > 1) {
-      localIssues.push(`Question contains ${questionImages.length} images; the current PYPA question format supports one question image`);
-    } else if (questionImages.length === 1) {
-      const stored = await storeImage(questionImages[0], questionNumber, "question");
-      questionImage = stored.path;
-      if (stored.issue) localIssues.push(stored.issue);
+
+    const comprehensionHtml = comprehensionCell
+      ? getCellQuestionHtml(comprehensionCell)
+      : "";
+
+    const questionHtmlPart = getCellQuestionHtml(questionCell);
+
+    const questionHtml = [
+      comprehensionHtml,
+      questionHtmlPart,
+    ].filter(Boolean).join("<br>");
+
+    const question = [
+      comprehensionText,
+      questionText,
+    ].filter(Boolean).join("\n\n");
+
+    // Collect images from both the comprehension and the actual question.
+    const questionImages = getNonMarkerImages(questionCell)
+
+    const questionImagePaths = [];
+
+    for (let imageIndex = 0; imageIndex < questionImages.length; imageIndex++) {
+      const stored = await storeImage(
+        questionImages[imageIndex],
+        questionNumber,
+        `question-${imageIndex + 1}`,
+      );
+
+      if (stored.path) questionImagePaths.push(stored.path);
+
+      if (stored.issue) {
+        localIssues.push(stored.issue);
+      }
     }
+
+    // Backward compatibility: existing PYPA code still reads questionImage.
+    const questionImage = questionImagePaths[0] || null;
+    // if (questionImages.length > 1) {
+    //   localIssues.push(`Question contains ${questionImages.length} images; the current PYPA question format supports one question image`);
+    // } else if (questionImages.length === 1) {
+    //   const stored = await storeImage(questionImages[0], questionNumber, "question");
+    //   questionImage = stored.path;
+    //   if (stored.issue) localIssues.push(stored.issue);
+    // }
 
     const options = [];
     const optionImageSources = [];
@@ -261,7 +335,7 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
     const status = menuText.match(/Status\s*:\s*([\s\S]*?)(?:Chosen\s*Option\s*:|$)/i)?.[1] || "";
 
     // Image-only prompts still need a non-empty stem in PYPA's current text-first schema.
-    const question = questionText || (questionImage ? "Image-based question — inspect the attached image." : "");
+    // const question = questionText || (questionImage ? "Image-based question — inspect the attached image." : "");
     const sectionLabel = cleanText(
       element.closest(".section-cntnr")?.querySelector(":scope > .section-lbl")?.textContent ||
       element.closest(".section-cntnr")?.querySelector(".section-lbl")?.textContent ||
@@ -289,8 +363,10 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
       optionImageSources,
       correctAnswerIndex: correctAnswerIndex >= 0 ? correctAnswerIndex : null,
       correctAnswer: correctAnswerIndex >= 0 ? options[correctAnswerIndex] || "" : "",
+      comprehension: comprehensionText,
       questionImage,
-      questionImageNotRequired: !questionImage,
+      questionImages: questionImagePaths,
+      questionImageNotRequired: questionImagePaths.length === 0,
       notes: "",
       // A green rightAns marker is the response sheet's official answer key.
       answerValidation: correctAnswerIndex >= 0 ? "source-key-verified" : "source-key-unverified",
