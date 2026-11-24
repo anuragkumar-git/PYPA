@@ -1280,11 +1280,14 @@ function App() {
   }
 
   async function handleImportResponseSheet() {
-    const paperId = responseSheetPaperId.trim();
+    const paperId = responseSheetPaperId
+      .trim()
+      .replace(/\s+/g, "-") // Safeguard: converts any remaining spaces to hyphens
+      .replace(/^-+|-+$/g, ""); // Removes leading or trailing hyphens;
 
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(paperId)) {
       setResponseSheetError(
-        "Paper ID must start with a letter or number and contain only letters, numbers, hyphens, or underscores.",
+        "Paper ID must be 1–80 characters, start with a letter or number, and contain only letters, numbers, hyphens, or underscores.",
       );
       return;
     }
@@ -1410,7 +1413,10 @@ function App() {
 
   // Create and persist paper metadata before adding its first question.
   async function handleCreateManualPaper() {
-    const paperId = paperForm.id.trim();
+    const paperId = paperForm.id
+      .trim()
+      .replace(/\s+/g, "-") // Safeguard: converts any remaining spaces to hyphens
+      .replace(/^-+|-+$/g, ""); // Removes leading or trailing hyphens;
 
     if (!paperId) {
       setDbMessage("Enter a paper ID.");
@@ -1420,7 +1426,7 @@ function App() {
     // Restrict IDs so generated question IDs and image paths remain predictable.
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(paperId)) {
       setDbMessage(
-        "Paper ID must start with a letter or number and contain only letters, numbers, hyphens, or underscores.",
+        "Paper ID must be 1–80 characters, start with a letter or number, and contain only letters, numbers, hyphens, or underscores.",
       );
       return;
     }
@@ -2436,11 +2442,21 @@ function App() {
           <button
             className="button primary full exam-launch-button"
             onClick={() => setExamOpen(true)}
-            disabled={!bank.some((q) => q.practiceReady && !q.visualReviewNeeded && Number.isInteger(q.correctAnswerIndex))}
+            disabled={
+              !bank.some(
+                (q) =>
+                  q.practiceReady &&
+                  !q.visualReviewNeeded &&
+                  Number.isInteger(q.correctAnswerIndex),
+              )
+            }
           >
             <Clock3 size={15} /> Exam simulation
           </button>
-          <p className="fineprint">Timed exam mode with section controls, question palette and deferred scoring.</p>
+          <p className="fineprint">
+            Timed exam mode with section controls, question palette and deferred
+            scoring.
+          </p>
           <div className="separator" />
           <h2>Overall coverage</h2>
           <div className="stats">
@@ -2993,7 +3009,11 @@ function App() {
                     <input
                       type="text"
                       value={responseSheetPaperId}
-                      onChange={(e) => setResponseSheetPaperId(e.target.value)}
+                      onChange={(e) =>
+                        setResponseSheetPaperId(
+                          e.target.value.replace(/\s+/g, "-"),
+                        )
+                      }
                       placeholder="RRB-JE-2026-10-27-S1"
                       maxLength={80}
                     />
@@ -3079,7 +3099,20 @@ function App() {
                     {responseSheetSourceLabel && (
                       <>
                         {" "}
-                        {" · "}Source: {responseSheetSourceLabel}
+                        Source:{" "}
+                        <span
+                          title={responseSheetSourceLabel}
+                          style={{
+                            display: "inline-block",
+                            maxWidth: "200px",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            verticalAlign: "bottom",
+                          }}
+                        >
+                          {responseSheetSourceLabel}
+                        </span>
                       </>
                     )}
                     {responseSheetPreview.questionIssues.length > 0 && (
