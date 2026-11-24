@@ -18,7 +18,6 @@ export default async function handler(req, res) {
     // Restrict fetching to Digialm response-sheet URLs.
     if (
       target.protocol !== "https:" ||
-      target.hostname !== "rrb.digialm.com" ||
       !target.pathname.includes("/touchstone/AssessmentQPHTMLMode1/")
     ) {
       return res.status(403).json({
@@ -34,9 +33,8 @@ export default async function handler(req, res) {
         "Accept":
           "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://rrb.digialm.com/",
       },
-      redirect: "manual",
+      redirect: "follow",
     });
 
     if (upstream.status >= 300 && upstream.status < 400) {
