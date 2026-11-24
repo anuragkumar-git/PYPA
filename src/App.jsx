@@ -1215,7 +1215,6 @@ function App() {
 
     if (
       parsedUrl.protocol !== "https:" ||
-      parsedUrl.hostname !== "rrb.digialm.com" ||
       !parsedUrl.pathname.includes("/touchstone/AssessmentQPHTMLMode1/")
     ) {
       setResponseSheetError("Enter a valid Digialm response-sheet URL.");
