@@ -381,12 +381,17 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
 
     const menuText = cleanText(element.querySelector(".menu-tbl")?.textContent || "");
     const questionId = menuText.match(/Question\s*ID\s*:\s*(\d+)/i)?.[1] || "";
-    const chosenOptionMatch = menuText.match(/Chosen\s*Option\s*:\s*(\d+)/i);
-    const chosenOptionNumber = chosenOptionMatch ? Number(chosenOptionMatch[1]) : null;
-    const originalChosenOptionIndex = Number.isInteger(chosenOptionNumber) && chosenOptionNumber >= 1 && chosenOptionNumber <= 4
-      ? chosenOptionNumber - 1
-      : null;
-    const status = menuText.match(/Status\s*:\s*([\s\S]*?)(?:Chosen\s*Option\s*:|$)/i)?.[1] || "";
+    const chosenOptionMatch = menuText.match(/Chosen\s*Option\s*:\s*([A-D]|\d+)/i);
+    const chosenOptionValue = chosenOptionMatch?.[1]?.toUpperCase() || "";
+
+    let originalChosenOptionIndex = null;
+
+    if (/^[A-D]$/.test(chosenOptionValue)) {
+      originalChosenOptionIndex = chosenOptionValue.charCodeAt(0) - 65;
+    } else if (/^[1-4]$/.test(chosenOptionValue)) {
+      originalChosenOptionIndex = Number(chosenOptionValue) - 1;
+    }
+    const status = menuText.match(/Status\s*:\s*([\s\S]*?)(?:Chosen\s*Option\s*:|$)/i)?.[1].trim() || "";
 
     // Image-only prompts still need a non-empty stem in PYPA's current text-first schema.
     // const question = questionText || (questionImage ? "Image-based question — inspect the attached image." : "");
