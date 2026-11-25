@@ -671,6 +671,12 @@ footer {
   min-width: 0;
   flex: 1;
 }
+.coverage-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 9px;
+  min-width: 0;
+}
 .coverage-q-number {
   flex: 0 0 34px;
   height: 28px;
@@ -1255,10 +1261,10 @@ footer {
   width: 100%;
   min-width: 0;
   margin-top: 10px;
-  padding: 14px;
+  /* padding: 14px;
   border: 1px solid #cfe2d9;
   border-radius: 11px;
-  background: #f7fbf8;
+  background: #f7fbf8; */
 }
 .question-detail-heading {
   display: flex;
@@ -1382,10 +1388,10 @@ footer {
 .paper-marks-panel {
   width: 100%;
   margin-top: 9px;
-  padding: 12px;
+  /* padding: 12px;
   border: 1px solid #d5e5dd;
   border-radius: 10px;
-  background: #f7fbf8;
+  background: #f7fbf8; */
   color: #23463a;
 }
 .paper-marks-panel > strong {
@@ -1424,7 +1430,7 @@ footer {
 }
 .paper-marks-score {
   margin: 10px 0 4px;
-  font-size: 13px;
+  font-size: 12px;
 }
 .paper-marks-warning {
   margin: 9px 0 4px;
@@ -2182,5 +2188,113 @@ footer {
     overflow: visible;
     overflow-y: visible;
     padding-bottom: calc(38px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Question validation diagnostics */
+.validation-diagnostics {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-color, #dce5e1);
+  border-radius: 12px;
+  background: var(--surface-secondary, #f8faf9);
+  overflow: hidden;
+}
+
+.validation-diagnostics-title {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.validation-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  min-width: 0;
+}
+
+.validation-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 9px;
+  background: white;
+}
+
+.validation-check-icon {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.check-passed .validation-check-icon {
+  color: #087a50;
+  background: #e2f5eb;
+}
+
+.check-failed .validation-check-icon {
+  color: #b42318;
+  background: #fee9e7;
+}
+
+.validation-check-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.validation-check-content strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.validation-check-content span {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, #64748b);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 600px) {
+  .validation-diagnostics {
+    padding: 11px;
+    margin-top: 10px;
+  }
+
+  .validation-check {
+    padding: 9px;
+    gap: 8px;
+  }
+
+  .validation-check-content strong {
+    font-size: 12px;
+  }
+
+  .validation-check-content span {
+    font-size: 12px;
+  }
+}
+
+/* Mobile and Tablet screens */
+@media (max-width: 1000px) {
+  .coverage-buttons {
+    flex-direction: column;
   }
 }

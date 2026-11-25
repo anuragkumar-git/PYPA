@@ -3717,6 +3717,29 @@ function App() {
                     {marksPaperId === p.id && p.responseAnalytics && (
                       <div className="paper-marks-panel">
                         <strong>Original response-sheet result</strong>
+                           {p.responseAnalytics.scoreAvailable ? (
+                          <p className="paper-marks-score">
+                            <b>
+                              {p.responseAnalytics.scoreComplete
+                                ? "Calculated marks"
+                                : "Partial calculated marks"}
+                              :
+                            </b>{" "}
+                            {Number(p.responseAnalytics.marksAwarded).toFixed(
+                              2,
+                            )}
+                            {Number.isFinite(
+                              p.responseAnalytics.maximumMarks,
+                            ) &&
+                              ` / ${Number(p.responseAnalytics.maximumMarks).toFixed(2)}`}
+                          </p>
+                        ) : (
+                          <p className="paper-marks-warning">
+                            Marking scheme was not detected. Correct/wrong
+                            counts are available, but marks cannot be calculated
+                            reliably.
+                          </p>
+                        )}
                         <div className="paper-marks-grid">
                           <span>
                             <b>Attempted</b>
@@ -3750,29 +3773,7 @@ function App() {
                               : `-${p.negativeMarks}`}
                           </span>
                         </div>
-                        {p.responseAnalytics.scoreAvailable ? (
-                          <p className="paper-marks-score">
-                            <b>
-                              {p.responseAnalytics.scoreComplete
-                                ? "Calculated marks"
-                                : "Partial calculated marks"}
-                              :
-                            </b>{" "}
-                            {Number(p.responseAnalytics.marksAwarded).toFixed(
-                              2,
-                            )}
-                            {Number.isFinite(
-                              p.responseAnalytics.maximumMarks,
-                            ) &&
-                              ` / ${Number(p.responseAnalytics.maximumMarks).toFixed(2)}`}
-                          </p>
-                        ) : (
-                          <p className="paper-marks-warning">
-                            Marking scheme was not detected. Correct/wrong
-                            counts are available, but marks cannot be calculated
-                            reliably.
-                          </p>
-                        )}
+                     
                         {p.responseAnalytics.notEvaluable > 0 && (
                           <p className="paper-marks-warning">
                             {p.responseAnalytics.notEvaluable} attempted
@@ -4446,14 +4447,14 @@ function App() {
                                           {q.correctAnswerIndex ===
                                             optionIndex && (
                                             <span className="detail-answer-tag">
-                                              Official answer
+                                             KEY
                                             </span>
                                           )}
                                           {q.source
                                             ?.originalChosenOptionIndex ===
                                             optionIndex && (
                                             <span className="detail-choice-tag">
-                                              Candidate selected
+                                              SEL
                                             </span>
                                           )}
                                         </div>
@@ -4483,7 +4484,7 @@ function App() {
                                         ]
                                       : "Not answered / not recorded"}
                                   </span>
-                                  <span>
+                                  {/* <span>
                                     <b>Source question ID:</b>{" "}
                                     {q.source?.questionId || "Not provided"}
                                   </span>
@@ -4493,7 +4494,7 @@ function App() {
                                     "source-key-verified"
                                       ? "Verified from official green marker"
                                       : "Not verified"}
-                                  </span>
+                                  </span> */}
                                 </div>
                                 {(q.notes || state.note) && (
                                   <div className="question-detail-note">
@@ -4570,25 +4571,42 @@ function App() {
                                         : "None recorded",
                                     },
                                   ];
+                                  const failedChecks = checks.filter(
+                                    (check) => !check.passed,
+                                  );
 
                                   return (
-                                    <div className="alert">
-                                      <strong>
-                                        Question validation:
-                                      </strong>
-                                      {checks.map((check) => (
-                                        <div
-                                          key={check.label}
-                                          style={{ marginTop: 8 }}
-                                        >
-                                          {/* <span>
-                                            {check.passed ? "✓" : "✕"}{" "}
-                                          </span> */}
-                                          <strong>{check.label}:</strong>{" "}
-                                          {check.detail}
+                                    failedChecks.length > 0 && (
+                                      <div className="validation-diagnostics">
+                                        <strong className="validation-diagnostics-title">
+                                          Question validation diagnostics
+                                          <span className="validation-failure-count">
+                                            {failedChecks.length} issue
+                                            {failedChecks.length !== 1
+                                              ? "s"
+                                              : ""}
+                                          </span>
+                                        </strong>
+
+                                        <div className="validation-checks">
+                                          {failedChecks.map((check) => (
+                                            <div
+                                              key={check.label}
+                                              className="validation-check check-failed"
+                                            >
+                                              <span className="validation-check-icon">
+                                                ✕
+                                              </span>
+
+                                              <div className="validation-check-content">
+                                                <strong>{check.label}</strong>
+                                                <span>{check.detail}</span>
+                                              </div>
+                                            </div>
+                                          ))}
                                         </div>
-                                      ))}
-                                    </div>
+                                      </div>
+                                    )
                                   );
                                 })()}
                                 <div className="button-row question-detail-actions">
@@ -4672,12 +4690,12 @@ function App() {
                                           Wrong attempt
                                         </span>
                                       )}
-                                      {q.answerValidation ===
+                                      {/* {q.answerValidation ===
                                         "source-key-verified" && (
                                         <span className="tag-covered">
                                           Key verified
                                         </span>
-                                      )}
+                                      )} */}
                                       {q.answerValidation ===
                                         "source-key-unverified" && (
                                         <span className="tag-warning">
@@ -4697,6 +4715,7 @@ function App() {
                                     )}
                                   </div>
                                 </div>
+                                <div className="coverage-buttons">
                                 <button
                                   className="button outline coverage-open-button"
                                   onClick={() => startEditingQuestion(q)}
@@ -4711,6 +4730,7 @@ function App() {
                                 >
                                   Open
                                 </button>
+                                </div>
                               </>
                             )}
                           </div>

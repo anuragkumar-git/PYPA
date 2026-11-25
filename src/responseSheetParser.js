@@ -94,7 +94,7 @@ function getCellQuestionHtml(cell, { removeOptionNumber = false } = {}) {
 
       if (!value.trim()) continue;
 
-      node.nodeValue = value.replace(/^\s*\d+\s*[.)]\s*/, "");
+      node.nodeValue = value.replace(/^\s*(?:\d+|[A-Da-d])\s*[.)]\s*/, "");
       break;
     }
   }
@@ -199,7 +199,7 @@ function getCellTextWithoutImages(cell, { removeOptionNumber = false } = {}) {
   clone.querySelectorAll("span[style*='color:#ffffff'], span[style*='color: #ffffff'], span[style*='color:white']")
     .forEach((span) => span.remove());
   let value = cleanText(clone.textContent);
-  if (removeOptionNumber) value = value.replace(/^\s*\d+\s*[.)]\s*/, "");
+  if (removeOptionNumber) value = value.replace(/^\s*(?:\d+|[A-Da-d])\s*[.)]\s*/, "");
   return value;
 }
 
