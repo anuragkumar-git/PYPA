@@ -23,6 +23,17 @@ db.version(3).stores({
   images: "[paperId+path], paperId, path",
   categories: "++id, type, parentId, name",
 });
+// Version 4: persistent submitted exam history and per-question responses.
+// Analytics intentionally resolves question metadata/answer keys from the live
+// question bank; answer rows retain the response and scoring inputs at submission.
+db.version(4).stores({
+  questions: "id, paperId, subject, topic, questionNumber",
+  papers: "id, date",
+  images: "[paperId+path], paperId, path",
+  categories: "++id, type, parentId, name",
+  testAttempts: "id, type, paperId, startedAt, submittedAt, status",
+  testAttemptAnswers: "id, attemptId, questionId, paperId, [attemptId+questionId], isAttempted",
+});
 // Keep subject/topic names consistent across all papers.
 // Topics are scoped to their parent subject.
 async function ensureCategoryRecord(type, name, parentId = "") {
@@ -349,7 +360,134 @@ export async function importQuestionBank(questions, imageEntries = []) {
     });
 }
 
+/**
+ * Persist one submitted exam and all its question responses atomically.
+ * Idempotent by attempt id: repeated submit/restore effects cannot duplicate it.
+ */
+export async function saveExamAttempt(attempt, questions) {
+  if (!attempt?.id || attempt.status !== "submitted") {
+    throw new Error("Only a submitted exam can be saved to analytics.");
+  }
+  if (!Array.isArray(questions) || !questions.length) {
+    throw new Error("The submitted exam has no questions to save.");
+  }
+
+  const answers = questions.map((question) => {
+    const response = attempt.answers?.[question.id] || {};
+    const attempted = Number.isInteger(response.answerIndex);
+    const correctAtSubmission = attempted && response.answerIndex === question.correctAnswerIndex;
+    const marksAwardedAtSubmission = correctAtSubmission
+      ? Number(attempt.config?.positiveMarks || 0)
+      : attempted
+        ? -Number(attempt.config?.negativeMarks || 0)
+        : 0;
+    return {
+      id: `${attempt.id}::${question.id}`,
+      attemptId: attempt.id,
+      questionId: question.id,
+      paperId: attempt.paperId,
+      selectedAnswerIndex: attempted ? response.answerIndex : null,
+      isAttempted: attempted,
+      visited: Boolean(response.visited),
+      visitCount: Math.max(0, Number(response.visitCount) || 0),
+      marked: Boolean(response.marked),
+      timeSpentMs: Math.max(0, Math.floor(Number(response.timeSpentMs) || 0)),
+      answerChangeCount: Math.max(0, Number(response.answerChangeCount) || 0),
+      answerChanges: Array.isArray(response.answerChanges) ? response.answerChanges : [],
+      // Fallback values preserve the submitted result if its question is later deleted.
+      correctAtSubmission: attempted ? correctAtSubmission : null,
+      marksAwardedAtSubmission,
+    };
+  });
+
+  const startedAt = Number(attempt.startedAt) || Date.now();
+  const submittedAt = Number(attempt.submittedAt) || Date.now();
+
+  const record = {
+    id: attempt.id,
+    type: "exam",
+    source: "pypa",
+    paperId: attempt.paperId,
+    status: "submitted",
+    startedAt,
+    submittedAt,
+    durationMs: Math.max(0, submittedAt - startedAt),
+    totalQuestions: answers.length,
+    attemptedAtSubmission: answers.filter((answer) => answer.isAttempted).length,
+    correctAtSubmission: answers.filter((answer) => answer.correctAtSubmission === true).length,
+    incorrectAtSubmission: answers.filter((answer) => answer.correctAtSubmission === false).length,
+    unansweredAtSubmission: answers.filter((answer) => !answer.isAttempted).length,
+    scoreAtSubmission: answers.reduce((total, answer) => total + answer.marksAwardedAtSubmission, 0),
+    positiveMarks: Number(attempt.config?.positiveMarks || 0),
+    negativeMarks: Number(attempt.config?.negativeMarks || 0),
+    finishReason: attempt.finishReason || "manual",
+    config: {
+      sectionNavigation: attempt.config?.sectionNavigation || "free",
+      sectionalTiming: Boolean(attempt.config?.sectionalTiming),
+      overallDurationSeconds: attempt.config?.overallDurationSeconds ?? null,
+      totalDurationSeconds: attempt.config?.totalDurationSeconds ?? null,
+      sections: (attempt.sections || []).map((section) => ({
+        name: section.name,
+        questionIds: [...(section.questionIds || [])],
+        durationSeconds: section.durationSeconds ?? null,
+      })),
+    },
+    savedAt: Date.now(),
+  };
+
+  return db.transaction("rw", db.testAttempts, db.testAttemptAnswers, async () => {
+    const existing = await db.testAttempts.get(record.id);
+    if (existing) return { saved: false, existing: true, attempt: existing };
+    await db.testAttempts.add(record);
+    await db.testAttemptAnswers.bulkAdd(answers);
+    return { saved: true, existing: false, attempt: record };
+  });
+}
+
+export async function getExamAttempts() {
+  return db.testAttempts.orderBy("submittedAt").reverse().toArray();
+}
+
+export async function getExamAttemptAnswers(attemptId) {
+  return db.testAttemptAnswers.where("attemptId").equals(attemptId).toArray();
+}
+
+/**
+ * Read exam history with current question-bank records attached.
+ * Existing question metadata/answer keys are deliberately live; if a question
+ * was deleted, the response remains available with question: null and its
+ * submission-time score fallback fields.
+ */
+export async function getExamAnalyticsData({ paperId } = {}) {
+  const attempts = paperId
+    ? await db.testAttempts.where("paperId").equals(paperId).toArray()
+    : await db.testAttempts.orderBy("submittedAt").reverse().toArray();
+  if (paperId) attempts.sort((a, b) => b.submittedAt - a.submittedAt);
+  if (!attempts.length) return { attempts: [], responses: [] };
+
+  const attemptIds = attempts.map((attempt) => attempt.id);
+  const responses = await db.testAttemptAnswers
+    .where("attemptId")
+    .anyOf(attemptIds)
+    .toArray();
+  const questionIds = [...new Set(responses.map((response) => response.questionId))];
+  const currentQuestions = await db.questions.bulkGet(questionIds);
+  const questionById = new Map(
+    currentQuestions.filter(Boolean).map((question) => [question.id, question]),
+  );
+
+  return {
+    attempts,
+    responses: responses.map((response) => ({
+      ...response,
+      question: questionById.get(response.questionId) || null,
+    })),
+  };
+}
+
 export async function deletePaper(paperId) {
+  // Attempt history is intentionally retained. Analytics can still show the
+  // submitted response and submission-time fallback when its live question is gone.
   await db.transaction("rw", db.questions, db.papers, db.images, async () => {
     await db.questions.where("paperId").equals(paperId).delete();
     await db.papers.delete(paperId);

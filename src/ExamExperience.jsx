@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { sanitizeQuestionHtml } from "./responseSheetParser.js";
+import { saveExamAttempt } from "./db.js";
 
 const ACTIVE_EXAM_KEY = "pypa-active-exam-v1";
 const LETTERS = ["A", "B", "C", "D"];
@@ -49,6 +50,41 @@ function loadSavedExam() {
     return null;
   }
 }
+function stopQuestionClock(answers, questionId, at = Date.now()) {
+  if (!questionId || !answers?.[questionId]) return answers;
+  const answer = answers[questionId];
+  const elapsed = answer.activeSince
+    ? Math.max(0, at - Number(answer.activeSince))
+    : 0;
+  return {
+    ...answers,
+    [questionId]: {
+      ...answer,
+      timeSpentMs: Math.max(0, Number(answer.timeSpentMs) || 0) + elapsed,
+      activeSince: null,
+    },
+  };
+}
+
+function applyAnswerChange(answers, questionId, nextAnswerIndex, at = Date.now()) {
+  const previous = answers[questionId] || {};
+  if (previous.answerIndex === nextAnswerIndex) return answers;
+  const changes = previous.answerChanges || [];
+  return {
+    ...answers,
+    [questionId]: {
+      ...previous,
+      answerIndex: nextAnswerIndex,
+      answerChangeCount: (Number(previous.answerChangeCount) || 0) + 1,
+      answerChanges: [...changes, {
+        from: Number.isInteger(previous.answerIndex) ? previous.answerIndex : null,
+        to: Number.isInteger(nextAnswerIndex) ? nextAnswerIndex : null,
+        at,
+      }],
+    },
+  };
+}
+
 function statusOf(answer) {
   if (!answer?.visited) return "not-visited";
   if (Number.isInteger(answer.answerIndex) && answer.marked)
@@ -250,10 +286,13 @@ export default function ExamExperience({
   const [now, setNow] = useState(Date.now());
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [setupError, setSetupError] = useState("");
+  const [attemptSaveError, setAttemptSaveError] = useState("");
   const paletteGridRef = useRef(null);
+  const examRef = useRef(null);
+  examRef.current = exam;
   useEffect(() => {
     const savedExam = loadSavedExam();
-    if (savedExam?.status === "running") {
+    if (savedExam && ["running", "submitted"].includes(savedExam.status)) {
       const savedQuestionIds =
         savedExam.questionIds || savedExam.questions?.map((q) => q.id) || [];
       const restoredQuestions = savedQuestionIds
@@ -272,7 +311,16 @@ export default function ExamExperience({
           )
             ? savedExam.currentQuestionId
             : restoredQuestions[0].id,
+          answers: { ...(savedExam.answers || {}) },
         };
+        // Do not count time while the app was closed or the exam was suspended.
+        const restoredActiveId = restored.currentQuestionId;
+        if (restored.answers[restoredActiveId]) {
+          restored.answers[restoredActiveId] = {
+            ...restored.answers[restoredActiveId],
+            activeSince: Date.now(),
+          };
+        }
 
         // Migrate sessions created before strict sectional timing existed.
         // A legacy session with every section timed becomes strict timed mode;
@@ -345,6 +393,23 @@ export default function ExamExperience({
           }
         }
 
+        restored.answers = Object.fromEntries(
+          restoredQuestions.map((question) => {
+            const answer = restored.answers[question.id] || {};
+            return [question.id, {
+              answerIndex: Number.isInteger(answer.answerIndex) ? answer.answerIndex : null,
+              visited: Boolean(answer.visited),
+              marked: Boolean(answer.marked),
+              timeSpentMs: Math.max(0, Number(answer.timeSpentMs) || 0),
+              visitCount: Math.max(0, Number(answer.visitCount) || (answer.visited ? 1 : 0)),
+              answerChangeCount: Math.max(0, Number(answer.answerChangeCount) || 0),
+              answerChanges: Array.isArray(answer.answerChanges) ? answer.answerChanges : [],
+              activeSince: question.id === restored.currentQuestionId && restored.status === "running"
+                ? (document.hidden ? null : Date.now())
+                : null,
+            }];
+          }),
+        );
         setPaperId(savedExam.paperId);
         setExam(restored);
       }
@@ -367,7 +432,33 @@ export default function ExamExperience({
 
   useEffect(() => {
     if (!exam || exam.status !== "running") return undefined;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    const id = window.setInterval(() => {
+      const tickAt = Date.now();
+      setNow(tickAt);
+      // Persist active-question time at one-second granularity. Besides making
+      // timing accurate across revisits, this limits crash/reload loss to ~1s.
+      if (!document.hidden) {
+        setExam((prev) => {
+          if (!prev || prev.status !== "running") return prev;
+          const activeId = prev.currentQuestionId;
+          const answer = prev.answers[activeId];
+          if (!answer?.activeSince) return prev;
+          const elapsed = Math.max(0, tickAt - Number(answer.activeSince));
+          if (!elapsed) return prev;
+          return {
+            ...prev,
+            answers: {
+              ...prev.answers,
+              [activeId]: {
+                ...answer,
+                timeSpentMs: Math.max(0, Number(answer.timeSpentMs) || 0) + elapsed,
+                activeSince: tickAt,
+              },
+            },
+          };
+        });
+      }
+    }, 1000);
     return () => window.clearInterval(id);
   }, [exam?.status]);
 
@@ -383,6 +474,69 @@ export default function ExamExperience({
       );
     }
   }, [exam]);
+
+  // Pause the active question clock while the tab is hidden, and resume only
+  // when it becomes visible again. This avoids counting background time.
+  useEffect(() => {
+    if (exam?.status !== "running") return undefined;
+    const handleVisibility = () => {
+      const at = Date.now();
+      setExam((prev) => {
+        if (!prev || prev.status !== "running") return prev;
+        const activeId = prev.currentQuestionId;
+        if (document.hidden) {
+          return { ...prev, answers: stopQuestionClock(prev.answers, activeId, at) };
+        }
+        const answer = prev.answers[activeId];
+        if (!answer || answer.activeSince) return prev;
+        return {
+          ...prev,
+          answers: { ...prev.answers, [activeId]: { ...answer, activeSince: at } },
+        };
+      });
+    };
+    const handlePageHide = () => {
+      const current = examRef.current;
+      if (!current || current.status !== "running") return;
+      const at = Date.now();
+      const paused = {
+        ...current,
+        answers: stopQuestionClock(current.answers, current.currentQuestionId, at),
+      };
+      const { questions: examQuestions, ...persisted } = paused;
+      localStorage.setItem(ACTIVE_EXAM_KEY, JSON.stringify({
+        ...persisted,
+        questionIds: examQuestions.map((question) => question.id),
+      }));
+      setExam(paused);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handleVisibility);
+    };
+  }, [exam?.status]);
+
+  // Save submitted attempts once. The database transaction is idempotent by
+  // attempt id, so repeated effects or recovery cannot create duplicates.
+  useEffect(() => {
+    if (exam?.status !== "submitted") return undefined;
+    let cancelled = false;
+    setAttemptSaveError("");
+    saveExamAttempt(exam, exam.questions)
+      .then(() => {
+        if (!cancelled) setAttemptSaveError("");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setAttemptSaveError(error?.message || "Could not save this exam to analytics.");
+        }
+      });
+    return () => { cancelled = true; };
+  }, [exam?.id, exam?.status, exam?.submittedAt]);
 
   const activeSections = exam?.sections || sections;
   const setupHasAnySectionTime = sections.some(
@@ -495,9 +649,11 @@ export default function ExamExperience({
         );
 
         // The final timed section has expired: submit automatically.
+        const stoppedAnswers = stopQuestionClock(prev.answers, prev.currentQuestionId, now);
         if (nextIndex < 0) {
           return {
             ...prev,
+            answers: stoppedAnswers,
             sections: expiredSections,
             status: "submitted",
             submittedAt: now,
@@ -509,6 +665,7 @@ export default function ExamExperience({
         if (!nextQuestionId) {
           return {
             ...prev,
+            answers: stoppedAnswers,
             sections: expiredSections,
             status: "submitted",
             submittedAt: now,
@@ -521,10 +678,12 @@ export default function ExamExperience({
           sections: expiredSections,
           currentQuestionId: nextQuestionId,
           answers: {
-            ...prev.answers,
+            ...stoppedAnswers,
             [nextQuestionId]: {
-              ...prev.answers[nextQuestionId],
+              ...stoppedAnswers[nextQuestionId],
               visited: true,
+              visitCount: (Number(stoppedAnswers[nextQuestionId]?.visitCount) || 0) + 1,
+              activeSince: document.hidden ? null : now,
             },
           },
         };
@@ -648,7 +807,7 @@ export default function ExamExperience({
 
     const first = paperQuestions[0];
     const next = {
-      id: `exam-${start}`,
+      id: `exam-${start}-${Math.random().toString(36).slice(2, 8)}`,
       paperId,
       status: "running",
       startedAt: start,
@@ -657,7 +816,7 @@ export default function ExamExperience({
       answers: Object.fromEntries(
         paperQuestions.map((q) => [
           q.id,
-          { answerIndex: null, visited: q.id === first.id, marked: false },
+          { answerIndex: null, visited: q.id === first.id, marked: false, timeSpentMs: 0, visitCount: q.id === first.id ? 1 : 0, answerChangeCount: 0, answerChanges: [], activeSince: q.id === first.id ? start : null },
         ]),
       ),
       sections: configuredSections,
@@ -688,7 +847,7 @@ export default function ExamExperience({
   }
 
   function navigateTo(questionId) {
-    if (!exam || exam.status !== "running") return;
+    if (!exam || exam.status !== "running" || questionId === exam.currentQuestionId) return;
 
     const targetIndex = sectionByQuestion[questionId];
     const activeIndex = sectionByQuestion[exam.currentQuestionId] ?? 0;
@@ -722,12 +881,19 @@ export default function ExamExperience({
       if (!target || target.locked) return prev;
       if (prev.config?.sectionalTiming && targetIndex !== activeIndex)
         return prev;
+      const at = Date.now();
+      const stoppedAnswers = stopQuestionClock(prev.answers, prev.currentQuestionId, at);
       return {
         ...prev,
         currentQuestionId: questionId,
         answers: {
-          ...prev.answers,
-          [questionId]: { ...prev.answers[questionId], visited: true },
+          ...stoppedAnswers,
+          [questionId]: {
+            ...stoppedAnswers[questionId],
+            visited: true,
+            visitCount: (Number(stoppedAnswers[questionId]?.visitCount) || 0) + 1,
+            activeSince: at,
+          },
         },
       };
     });
@@ -740,14 +906,7 @@ export default function ExamExperience({
     }
     setExam((prev) => ({
       ...prev,
-      answers: {
-        ...prev.answers,
-        [currentQuestion.id]: {
-          ...prev.answers[currentQuestion.id],
-          visited: true,
-          answerIndex,
-        },
-      },
+      answers: applyAnswerChange(prev.answers, currentQuestion.id, answerIndex),
     }));
   }
   function clearAnswer() {
@@ -758,13 +917,7 @@ export default function ExamExperience({
     }
     setExam((prev) => ({
       ...prev,
-      answers: {
-        ...prev.answers,
-        [currentQuestion.id]: {
-          ...prev.answers[currentQuestion.id],
-          answerIndex: null,
-        },
-      },
+      answers: applyAnswerChange(prev.answers, currentQuestion.id, null),
     }));
   }
   function toggleReview() {
@@ -786,18 +939,36 @@ export default function ExamExperience({
     }));
   }
   function finishExam(reason = "manual") {
-    setExam((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: "submitted",
-            submittedAt: Date.now(),
-            finishReason: reason,
-          }
-        : prev,
-    );
+    const submittedAt = Date.now();
+    setExam((prev) => {
+      if (!prev || prev.status !== "running") return prev;
+      return {
+        ...prev,
+        answers: stopQuestionClock(prev.answers, prev.currentQuestionId, submittedAt),
+        status: "submitted",
+        submittedAt,
+        finishReason: reason,
+      };
+    });
     setConfirmSubmit(false);
   }
+  function pauseExamAndClose() {
+    if (exam?.status === "running") {
+      const at = Date.now();
+      const paused = {
+        ...exam,
+        answers: stopQuestionClock(exam.answers, exam.currentQuestionId, at),
+      };
+      const { questions: examQuestions, ...persisted } = paused;
+      localStorage.setItem(ACTIVE_EXAM_KEY, JSON.stringify({
+        ...persisted,
+        questionIds: examQuestions.map((question) => question.id),
+      }));
+      setExam(paused);
+    }
+    onClose?.();
+  }
+
   function closeAndClear() {
     localStorage.removeItem(ACTIVE_EXAM_KEY);
     setExam(null);
@@ -841,7 +1012,7 @@ export default function ExamExperience({
           </div>
           <button
             className="exam-icon-button"
-            onClick={onClose}
+            onClick={pauseExamAndClose}
             aria-label="Close exam"
           >
             <X size={20} />
@@ -1344,6 +1515,11 @@ export default function ExamExperience({
                 <small>Accuracy</small>
               </div>
             </div>
+            {attemptSaveError && (
+              <p className="exam-warning" role="alert">
+                Analytics save failed: {attemptSaveError}. Keep this result open and retry by reloading the app before closing it.
+              </p>
+            )}
             <div className="exam-result-actions">
               <button className="button outline" onClick={closeAndClear}>
                 Close result
