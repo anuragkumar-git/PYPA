@@ -190,8 +190,7 @@ export default function ExamExperience({
             restored.config = {
               ...restored.config,
               sectionalTiming: false,
-              sectionNavigation:
-                restored.config?.sectionNavigation || "free",
+              sectionNavigation: restored.config?.sectionNavigation || "free",
             };
           }
         }
@@ -271,8 +270,8 @@ export default function ExamExperience({
   const sectionalTiming = Boolean(exam?.config?.sectionalTiming);
   const currentSectionExpired = Boolean(
     sectionalTiming &&
-      currentSection?.deadline &&
-      currentSection.deadline <= Date.now(),
+    currentSection?.deadline &&
+    currentSection.deadline <= Date.now(),
   );
   const currentSectionQuestionIds = currentSection?.questionIds || [];
   const currentSectionQuestionPosition = currentQuestion
@@ -336,7 +335,8 @@ export default function ExamExperience({
         if (!prev || prev.status !== "running") return prev;
 
         const nextIndex = prev.sections.findIndex(
-          (section, index) => index > currentSectionIndex && section.deadline > now,
+          (section, index) =>
+            index > currentSectionIndex && section.deadline > now,
         );
         const expiredSections = prev.sections.map((section) =>
           section.deadline && section.deadline <= now
@@ -491,9 +491,7 @@ export default function ExamExperience({
         ...section,
         durationSeconds,
         startedAt: sectionStart,
-        deadline: hasAllSectionTimes
-          ? start + cumulativeSeconds * 1000
-          : null,
+        deadline: hasAllSectionTimes ? start + cumulativeSeconds * 1000 : null,
         locked: false,
       };
     });
@@ -572,7 +570,8 @@ export default function ExamExperience({
       if (!prev || prev.status !== "running") return prev;
       const target = prev.sections[targetIndex];
       if (!target || target.locked) return prev;
-      if (prev.config?.sectionalTiming && targetIndex !== activeIndex) return prev;
+      if (prev.config?.sectionalTiming && targetIndex !== activeIndex)
+        return prev;
       return {
         ...prev,
         currentQuestionId: questionId,
@@ -730,7 +729,9 @@ export default function ExamExperience({
                   onChange={(e) => setNavigation(e.target.value)}
                 >
                   {setupHasAnySectionTime ? (
-                    <option value="timed">Automatic · section-by-section</option>
+                    <option value="timed">
+                      Automatic · section-by-section
+                    </option>
                   ) : (
                     <>
                       <option value="free">Free navigation</option>
@@ -1002,9 +1003,17 @@ export default function ExamExperience({
                     >
                       <span>{LETTERS[index]}</span>
                       <div>
-                        {/\.(png|jpe?g|webp|gif|svg|avif|bmp)(?:[?#].*)?$/i.test(
-                          option,
-                        ) ? (
+                        {currentQuestion.optionHtml?.[index] ? (
+                          <span
+                            dangerouslySetInnerHTML={{
+                              __html: sanitizeQuestionHtml(
+                                currentQuestion.optionHtml[index],
+                              ),
+                            }}
+                          />
+                        ) : /\.(png|jpe?g|webp|gif|svg|avif|bmp)(?:[?#].*)?$/i.test(
+                            option,
+                          ) ? (
                           <img
                             src={
                               imageUrls[
@@ -1051,15 +1060,25 @@ export default function ExamExperience({
                   <div className="exam-spacer" />
                   <button
                     className="button outline"
-                    onClick={() => previousQuestionId && navigateTo(previousQuestionId)}
-                    disabled={!previousQuestionId || currentSection?.locked || currentSectionExpired}
+                    onClick={() =>
+                      previousQuestionId && navigateTo(previousQuestionId)
+                    }
+                    disabled={
+                      !previousQuestionId ||
+                      currentSection?.locked ||
+                      currentSectionExpired
+                    }
                   >
                     Previous
                   </button>
                   <button
                     className="button primary"
                     onClick={() => nextQuestionId && navigateTo(nextQuestionId)}
-                    disabled={!nextQuestionId || currentSection?.locked || currentSectionExpired}
+                    disabled={
+                      !nextQuestionId ||
+                      currentSection?.locked ||
+                      currentSectionExpired
+                    }
                   >
                     Save & Next <ChevronRight size={15} />
                   </button>

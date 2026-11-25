@@ -46,12 +46,34 @@ export function sanitizeQuestionHtml(value) {
   return parsed.body.innerHTML;
 }
 
-function getCellQuestionHtml(cell) {
+function getCellQuestionHtml(cell, { removeOptionNumber = false } = {}) {
   if (!cell) return "";
+
   const clone = cell.cloneNode(true);
+
   clone.querySelectorAll("img").forEach((img) => img.remove());
-  clone.querySelectorAll("span[style*=\"color:#ffffff\"], span[style*=\"color: #ffffff\"], span[style*=\"color:white\"]")
+
+  clone
+    .querySelectorAll(
+      'span[style*="color:#ffffff"], span[style*="color: #ffffff"], span[style*="color:white"]',
+    )
     .forEach((span) => span.remove());
+
+  // Remove the source option number (e.g. "1.") without removing HTML tags.
+  if (removeOptionNumber) {
+    const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+    let node;
+
+    while ((node = walker.nextNode())) {
+      const value = node.nodeValue || "";
+
+      if (!value.trim()) continue;
+
+      node.nodeValue = value.replace(/^\s*\d+\s*[.)]\s*/, "");
+      break;
+    }
+  }
+
   return sanitizeQuestionHtml(clone.innerHTML);
 }
 
@@ -288,23 +310,28 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
     // }
 
     const options = [];
+    const optionHtml = [];
     const optionImageSources = [];
     for (let optionIndex = 0; optionIndex < 4; optionIndex++) {
       const optionRow = optionRows[optionIndex];
       if (!optionRow) {
         options.push("");
+        optionHtml.push("");
         optionImageSources.push("");
         continue;
       }
       const optionText = getCellTextWithoutImages(optionRow, { removeOptionNumber: true });
+      const optionHtmlPart = getCellQuestionHtml(optionRow, { removeOptionNumber: true });
       const optionImages = getNonMarkerImages(optionRow);
       if (optionImages.length > 1) {
         localIssues.push(`Option ${optionIndex + 1} contains multiple images; the current PYPA option format supports one image`);
         options.push(optionText);
+        optionHtml.push(optionHtmlPart);
         optionImageSources.push("");
       } else if (optionImages.length === 1 && !optionText) {
         const stored = await storeImage(optionImages[0], questionNumber, `option-${optionIndex + 1}`);
         options.push(stored.path || "");
+        optionHtml.push("");
         optionImageSources.push("");
         if (stored.issue) localIssues.push(`Option ${optionIndex + 1}: ${stored.issue}`);
       } else if (optionImages.length === 1 && optionText) {
@@ -312,10 +339,12 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
         // separately as optional source metadata so the view can display both.
         const stored = await storeImage(optionImages[0], questionNumber, `option-${optionIndex + 1}`);
         options.push(optionText);
+        optionHtml.push(optionHtmlPart);
         optionImageSources.push(stored.path || "");
         if (stored.issue) localIssues.push(`Option ${optionIndex + 1}: ${stored.issue}`);
       } else {
         options.push(optionText);
+        optionHtml.push(optionHtmlPart);
         optionImageSources.push("");
       }
     }
@@ -360,6 +389,7 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
       subject,
       topic,
       options,
+      optionHtml,
       optionImageSources,
       correctAnswerIndex: correctAnswerIndex >= 0 ? correctAnswerIndex : null,
       correctAnswer: correctAnswerIndex >= 0 ? options[correctAnswerIndex] || "" : "",
