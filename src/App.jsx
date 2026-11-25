@@ -131,11 +131,21 @@ function makeManualImagePath(questionId, slot, file) {
 }
 
 function isPracticeReady(q) {
+  const hasQuestionText =
+    typeof q.question === "string" && q.question.trim().length > 0;
+
+  const hasQuestionImage =
+    (typeof q.questionImage === "string" &&
+      q.questionImage.trim().length > 0) ||
+    (Array.isArray(q.questionImages) &&
+      q.questionImages.some(
+        (image) => typeof image === "string" && image.trim().length > 0,
+      ));
+
   return (
     q.practiceReady === true &&
     !q.visualReviewNeeded &&
-    typeof q.question === "string" &&
-    q.question.trim().length > 0 &&
+    (hasQuestionText || hasQuestionImage) &&
     Array.isArray(q.options) &&
     q.options.length === 4 &&
     q.options.every((o) => typeof o === "string" && o.trim().length > 0) &&
@@ -4490,12 +4500,97 @@ function App() {
                                     <b>Note:</b> {q.notes || state.note}
                                   </div>
                                 )}
-                                {q.reviewReasons?.length > 0 && (
-                                  <div className="alert">
-                                    <AlertTriangle size={15} />
-                                    <span>{q.reviewReasons.join("; ")}</span>
-                                  </div>
-                                )}
+                                {(() => {
+                                  const hasQuestionText =
+                                    typeof q.question === "string" &&
+                                    q.question.trim().length > 0;
+
+                                  const hasQuestionImage =
+                                    (typeof q.questionImage === "string" &&
+                                      q.questionImage.trim().length > 0) ||
+                                    (Array.isArray(q.questionImages) &&
+                                      q.questionImages.some(
+                                        (image) =>
+                                          typeof image === "string" &&
+                                          image.trim().length > 0,
+                                      ));
+
+                                  const checks = [
+                                    {
+                                      label: "Question stem",
+                                      passed:
+                                        hasQuestionText || hasQuestionImage,
+                                      detail: hasQuestionText
+                                        ? "Text available"
+                                        : hasQuestionImage
+                                          ? "Image-based question"
+                                          : "Neither text nor image found",
+                                    },
+                                    {
+                                      label: "Four options",
+                                      passed:
+                                        Array.isArray(q.options) &&
+                                        q.options.length === 4 &&
+                                        q.options.every((option) =>
+                                          String(option || "").trim(),
+                                        ),
+                                      detail: `${q.options?.filter((option) => String(option || "").trim()).length || 0}/4 available`,
+                                    },
+                                    {
+                                      label: "Answer key",
+                                      passed:
+                                        Number.isInteger(
+                                          q.correctAnswerIndex,
+                                        ) &&
+                                        q.correctAnswerIndex >= 0 &&
+                                        q.correctAnswerIndex < 4,
+                                      detail: Number.isInteger(
+                                        q.correctAnswerIndex,
+                                      )
+                                        ? `Option ${LABELS[q.correctAnswerIndex]}`
+                                        : "Missing or invalid",
+                                    },
+                                    {
+                                      label: "Visual review",
+                                      passed: !q.visualReviewNeeded,
+                                      detail: q.visualReviewNeeded
+                                        ? "Review required"
+                                        : "No flag",
+                                    },
+                                    {
+                                      label: "Practice ready",
+                                      passed: q.practiceReady === true,
+                                      detail: String(q.practiceReady),
+                                    },
+                                    {
+                                      label: "Review reasons",
+                                      passed: !q.reviewReasons?.length,
+                                      detail: q.reviewReasons?.length
+                                        ? q.reviewReasons.join("; ")
+                                        : "None recorded",
+                                    },
+                                  ];
+
+                                  return (
+                                    <div className="alert">
+                                      <strong>
+                                        Question validation:
+                                      </strong>
+                                      {checks.map((check) => (
+                                        <div
+                                          key={check.label}
+                                          style={{ marginTop: 8 }}
+                                        >
+                                          {/* <span>
+                                            {check.passed ? "✓" : "✕"}{" "}
+                                          </span> */}
+                                          <strong>{check.label}:</strong>{" "}
+                                          {check.detail}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
                                 <div className="button-row question-detail-actions">
                                   <button
                                     className="button primary"
