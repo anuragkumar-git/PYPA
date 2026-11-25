@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
+  ChevronLeft,
   ChevronRight,
   Clock3,
   Flag,
@@ -1211,7 +1212,7 @@ export default function ExamExperience({
                       currentSectionExpired
                     }
                   >
-                    Previous
+                    <ChevronLeft size={15} />Previous
                   </button>
                   {!nextQuestionId ? (
                     <button
