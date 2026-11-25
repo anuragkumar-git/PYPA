@@ -51,14 +51,39 @@ function getCellQuestionHtml(cell, { removeOptionNumber = false } = {}) {
 
   const clone = cell.cloneNode(true);
 
-  clone.querySelectorAll("img").forEach((img) => img.remove());
+  // clone.querySelectorAll("img").forEach((img) => img.remove());
 
+  // Remove invisible white text used by the response sheet.
   clone
     .querySelectorAll(
       'span[style*="color:#ffffff"], span[style*="color: #ffffff"], span[style*="color:white"]',
     )
     .forEach((span) => span.remove());
 
+  let imageIndex = 0;
+
+  // Replace actual question images with placeholders.
+  // Do NOT remove all images before this loop.
+  clone.querySelectorAll("img").forEach((img) => {
+    const src = (img.getAttribute("src") || "").toLowerCase();
+    const name = (img.getAttribute("name") || "").toLowerCase();
+
+    const isMarker =
+      img.classList.contains("tick") ||
+      /(?:tick|cross)\.png(?:[?#]|$)/.test(src) ||
+      /(?:tick|cross)\.png(?:[?#]|$)/.test(name);
+
+    if (isMarker) {
+      img.remove();
+      return;
+    }
+
+    const placeholder = document.createElement("span");
+    placeholder.textContent = `[[QUESTION_IMAGE_${imageIndex}]]`;
+
+    img.replaceWith(placeholder);
+    imageIndex++;
+  });
   // Remove the source option number (e.g. "1.") without removing HTML tags.
   if (removeOptionNumber) {
     const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
@@ -402,7 +427,12 @@ export async function parseTcsIonResponseSheet(htmlText, paperId, imageOrigin = 
       answerValidation: correctAnswerIndex >= 0 ? "source-key-verified" : "source-key-unverified",
       verified: correctAnswerIndex >= 0,
       visualReviewNeeded: localIssues.length > 0,
-      practiceReady: localIssues.length === 0 && Boolean(question) && options.length === 4 && options.every(Boolean) && correctAnswerIndex >= 0,
+      practiceReady:
+        localIssues.length === 0 &&
+        Boolean(question || questionImagePaths.length > 0) &&
+        options.length === 4 &&
+        options.every(Boolean) &&
+        correctAnswerIndex >= 0,
       reviewReasons: localIssues,
       source: {
         provider: "TCS iON / Digialm",

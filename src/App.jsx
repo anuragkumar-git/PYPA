@@ -234,8 +234,18 @@ function normalizeQuestion(raw, index, archivePaths = null) {
   }
 
   const referencedPaths = [];
-  if (typeof q.questionImage === "string" && q.questionImage.trim())
+
+  if (typeof q.questionImage === "string" && q.questionImage.trim()) {
     referencedPaths.push(normalizePath(q.questionImage));
+  }
+
+  if (Array.isArray(q.questionImages)) {
+    q.questionImages.forEach((path) => {
+      if (typeof path === "string" && path.trim()) {
+        referencedPaths.push(normalizePath(path));
+      }
+    });
+  }
   options.forEach((o) => {
     if (isImagePath(o)) referencedPaths.push(normalizePath(o));
   });
@@ -250,7 +260,15 @@ function normalizeQuestion(raw, index, archivePaths = null) {
           (path) => !/^https?:\/\//i.test(path) && !archivePaths.has(path),
         );
   const hasImageReference = referencedPaths.length > 0;
-  const questionMissing = typeof q.question !== "string" || !q.question.trim();
+  const hasQuestionText =
+    typeof q.question === "string" && q.question.trim().length > 0;
+
+  const hasQuestionImage =
+    (typeof q.questionImage === "string" &&
+      q.questionImage.trim().length > 0) ||
+    (Array.isArray(q.questionImages) && q.questionImages.length > 0);
+
+  const questionMissing = !hasQuestionText && !hasQuestionImage;
   const optionMissing = options.some((o) => !o.trim());
   const invalidAnswerMissing = answerIndex === null;
   const sourceImageMissing = missingImages.length > 0;
@@ -456,6 +474,16 @@ function App() {
           path: normalizePath(q.questionImage),
           paperId: q.paperId,
         });
+      (q.questionImages || []).forEach((path) => {
+        if (path && !/^https?:\/\//i.test(path)) {
+          const normalized = normalizePath(path);
+
+          refs.set(`${q.paperId}::${normalized}`, {
+            path: normalized,
+            paperId: q.paperId,
+          });
+        }
+      });
       (q.options || []).forEach((option) => {
         if (isImagePath(option) && !/^https?:\/\//i.test(option))
           refs.set(`${q.paperId}::${normalizePath(option)}`, {
@@ -4495,7 +4523,11 @@ function App() {
                                     <strong>
                                       {(
                                         q.question ||
-                                        `Question text missing — ${q.id}`
+                                        (q.questionImage ||
+                                        (Array.isArray(q.questionImages) &&
+                                          q.questionImages.length > 0)
+                                          ? `Image-based question — ${q.id}`
+                                          : `Question text missing — ${q.id}`)
                                       )
                                         .replace(/\s+/g, " ")
                                         .slice(0, 450)}

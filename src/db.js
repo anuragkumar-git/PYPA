@@ -207,6 +207,11 @@ export async function saveQuestionWithImages(question, imageEntries = []) {
       const referenced = new Set();
       for (const item of paperQuestions) {
         if (item.questionImage) referenced.add(normalizeImagePath(item.questionImage));
+        for (const imagePath of item.questionImages || []) {
+          if (imagePath) {
+            referenced.add(normalizeImagePath(imagePath));
+          }
+        }
         for (const option of item.options || []) {
           if (typeof option === "string" && /\.(png|jpe?g|webp|gif|svg|avif|bmp)(?:[?#].*)?$/i.test(option)) {
             referenced.add(normalizeImagePath(option));
@@ -312,19 +317,29 @@ export async function importQuestionBank(questions, imageEntries = []) {
         if (!path || !item.blob) continue;
         // Each archive's image names are scoped to its paper(s), preventing same-name collisions.
         for (const paperId of incomingPapers) {
-          const isReferencedByPaper = questions.some(q =>
+          const isReferencedByPaper = questions.some((q) =>
             q.paperId === paperId &&
-            (normalizeImagePath(q.questionImage) === path ||
-              (q.options || []).some(option =>
-                typeof option === "string" &&
-                /\.(png|jpe?g|webp|gif|svg|avif|bmp)(?:[?#].*)?$/i.test(option) &&
-                normalizeImagePath(option) === path
+            (
+              normalizeImagePath(q.questionImage) === path ||
+
+              (q.questionImages || []).some(
+                (imagePath) => normalizeImagePath(imagePath) === path
               ) ||
-              (q.optionImageSources || []).some(source =>
-                typeof source === "string" &&
-                !/^https?:\/\//i.test(source) &&
-                normalizeImagePath(source) === path
-              ))
+
+              (q.options || []).some(
+                (option) =>
+                  typeof option === "string" &&
+                  /\.(png|jpe?g|webp|gif|svg|avif|bmp)(?:[?#].*)?$/i.test(option) &&
+                  normalizeImagePath(option) === path
+              ) ||
+
+              (q.optionImageSources || []).some(
+                (source) =>
+                  typeof source === "string" &&
+                  !/^https?:\/\//i.test(source) &&
+                  normalizeImagePath(source) === path
+              )
+            )
           );
           if (isReferencedByPaper) {
             await db.images.put({ paperId, path, blob: item.blob, updatedAt: new Date().toISOString() });

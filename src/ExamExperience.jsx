@@ -56,6 +56,155 @@ function statusOf(answer) {
   if (answer.marked) return "marked";
   return "not-answered";
 }
+function renderQuestionHtmlWithImages(html, question, imageUrls) {
+  const imagePaths =
+    question.questionImages?.length > 0
+      ? question.questionImages
+      : question.questionImage
+        ? [question.questionImage]
+        : [];
+  // console.log("Question:", question.id);
+  // console.log("Stored image paths:", imagePaths);
+  // console.log(
+  //   "HTML placeholders:",
+  //   question.questionHtml?.match(/\[\[QUESTION_IMAGE_\d+\]\]/g),
+  // );
+  const renderedImageIndices = new Set();
+
+  // function getImageSrc(imageIndex) {
+  //   const imagePath = imagePaths[imageIndex];
+
+  //   if (!imagePath) return null;
+
+  //   return /^https?:\/\//i.test(imagePath)
+  //     ? imagePath
+  //     : imageUrls[`${question.paperId}::${imagePath}`] || null;
+  // }
+  function getImageSrc(imageIndex) {
+    const imagePath = imagePaths[imageIndex];
+
+    if (!imagePath) {
+      console.warn("Missing image path:", imageIndex);
+      return null;
+    }
+
+    const imageKey = `${question.paperId}::${imagePath}`;
+
+    const imageSrc = /^https?:\/\//i.test(imagePath)
+      ? imagePath
+      : imageUrls[imageKey] || null;
+
+    console.log("Image resolution:", {
+      imageIndex,
+      imagePath,
+      imageKey,
+      imageSrc,
+      availableKeys: Object.keys(imageUrls).filter((key) =>
+        key.includes(imagePath),
+      ),
+    });
+
+    return imageSrc;
+  }
+
+  function renderImage(imageIndex, key) {
+    const imageSrc = getImageSrc(imageIndex);
+
+    if (!imageSrc) return null;
+
+    renderedImageIndices.add(imageIndex);
+
+    return (
+      <img
+        key={key}
+        className="exam-question-image"
+        src={imageSrc}
+        alt={`Question illustration ${imageIndex + 1}`}
+      />
+    );
+  }
+
+  // Render text nodes and replace placeholders wherever they occur,
+  // including inside nested elements such as <sup>, <span>, etc.
+  function renderText(text, keyPrefix) {
+    const parts = text.split(/(\[\[QUESTION_IMAGE_\d+\]\])/g);
+
+    return parts.map((part, index) => {
+      const match = part.match(/^\[\[QUESTION_IMAGE_(\d+)\]\]$/);
+
+      if (match) {
+        const imageIndex = Number(match[1]);
+
+        return renderImage(imageIndex, `${keyPrefix}-image-${imageIndex}`);
+      }
+
+      return part ? (
+        <React.Fragment key={`${keyPrefix}-text-${index}`}>
+          {part}
+        </React.Fragment>
+      ) : null;
+    });
+  }
+
+  // Convert the sanitized HTML DOM into React elements.
+  function renderNode(node, key) {
+    if (node.nodeType === 3) {
+      return renderText(node.nodeValue || "", key);
+    }
+
+    if (node.nodeType !== 1) return null;
+
+    const tag = node.tagName.toLowerCase();
+
+    const props = {};
+
+    if (tag === "td" || tag === "th") {
+      if (node.hasAttribute("colspan")) {
+        props.colSpan = Number(node.getAttribute("colspan"));
+      }
+
+      if (node.hasAttribute("rowspan")) {
+        props.rowSpan = Number(node.getAttribute("rowspan"));
+      }
+
+      if (node.hasAttribute("align")) {
+        props.align = node.getAttribute("align");
+      }
+    }
+
+    const children = Array.from(node.childNodes).map((child, index) =>
+      renderNode(child, `${key}-${index}`),
+    );
+
+    return React.createElement(tag, { key, ...props }, ...children);
+  }
+
+  // Sanitize before converting the HTML into React elements.
+  const safeHtml = sanitizeQuestionHtml(html || "");
+  const parsed = new DOMParser().parseFromString(safeHtml, "text/html");
+
+  const htmlContent = Array.from(parsed.body.childNodes).map((node, index) =>
+    renderNode(node, `question-node-${index}`),
+  );
+
+  // Render stored images that have no corresponding HTML placeholder.
+  // This prevents missing images without duplicating already-rendered ones.
+  const remainingImages = imagePaths
+    .map((_, index) => index)
+    .filter((index) => !renderedImageIndices.has(index))
+    .map((index) => (
+      <div key={`fallback-question-image-${index}`}>
+        {renderImage(index, `fallback-image-${index}`)}
+      </div>
+    ));
+
+  return (
+    <>
+      {htmlContent}
+      {remainingImages}
+    </>
+  );
+}
 
 export default function ExamExperience({
   questions,
@@ -969,30 +1118,23 @@ export default function ExamExperience({
                 )}
                 <div className="exam-question-copy">
                   {currentQuestion?.questionHtml ? (
-                    <div
-                      dangerouslySetInnerHTML={{
-                        __html: sanitizeQuestionHtml(
-                          currentQuestion.questionHtml,
-                        ),
-                      }}
-                    />
+                    renderQuestionHtmlWithImages(
+                      currentQuestion.questionHtml,
+                      currentQuestion,
+                      imageUrls,
+                    )
                   ) : (
-                    <p>{currentQuestion?.question}</p>
+                    <>
+                      <p>{currentQuestion?.question}</p>
+
+                      {renderQuestionHtmlWithImages(
+                        "",
+                        currentQuestion,
+                        imageUrls,
+                      )}
+                    </>
                   )}
                 </div>
-                {currentQuestion?.questionImage && (
-                  <img
-                    className="exam-question-image"
-                    src={
-                      /^https?:\/\//i.test(currentQuestion.questionImage)
-                        ? currentQuestion.questionImage
-                        : imageUrls[
-                            `${currentQuestion.paperId}::${currentQuestion.questionImage}`
-                          ]
-                    }
-                    alt="Question"
-                  />
-                )}
                 <div className="exam-options">
                   {(currentQuestion?.options || []).map((option, index) => (
                     <button
@@ -1071,36 +1213,32 @@ export default function ExamExperience({
                   >
                     Previous
                   </button>
-                  <button
-                    className="button primary"
-                    onClick={() => nextQuestionId && navigateTo(nextQuestionId)}
-                    disabled={
-                      !nextQuestionId ||
-                      currentSection?.locked ||
-                      currentSectionExpired
-                    }
-                  >
-                    Save & Next <ChevronRight size={15} />
-                  </button>
+                  {!nextQuestionId ? (
+                    <button
+                      className="button primary"
+                      onClick={() => setConfirmSubmit(true)}
+                    >
+                      Submit exam
+                    </button>
+                  ) : (
+                    <button
+                      className="button primary"
+                      onClick={() =>
+                        nextQuestionId && navigateTo(nextQuestionId)
+                      }
+                      disabled={
+                        !nextQuestionId ||
+                        currentSection?.locked ||
+                        currentSectionExpired
+                      }
+                    >
+                      Save & Next <ChevronRight size={15} />
+                    </button>
+                  )}
                 </div>
               </section>
               <aside className="exam-palette">
                 <h3>Question palette</h3>
-                {/* <div className="exam-section-tabs">
-                  {exam.sections.map((section, index) => (
-                    <button
-                      key={section.name}
-                      className={`${index === currentSectionIndex ? "active" : ""} ${section.locked ? "locked" : ""}`}
-                      onClick={() => {
-                        const qid = section.questionIds[0];
-                        if (qid && !section.locked) navigateTo(qid);
-                      }}
-                    >
-                      {section.name}
-                      {section.locked ? " · Locked" : ""}
-                    </button>
-                  ))}
-                </div> */}
                 <div className="exam-palette-grid" ref={paletteGridRef}>
                   {exam.questions.map((q, index) => {
                     const status = statusOf(exam.answers[q.id]);
