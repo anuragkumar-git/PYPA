@@ -66,7 +66,12 @@ function stopQuestionClock(answers, questionId, at = Date.now()) {
   };
 }
 
-function applyAnswerChange(answers, questionId, nextAnswerIndex, at = Date.now()) {
+function applyAnswerChange(
+  answers,
+  questionId,
+  nextAnswerIndex,
+  at = Date.now(),
+) {
   const previous = answers[questionId] || {};
   if (previous.answerIndex === nextAnswerIndex) return answers;
   const changes = previous.answerChanges || [];
@@ -76,11 +81,16 @@ function applyAnswerChange(answers, questionId, nextAnswerIndex, at = Date.now()
       ...previous,
       answerIndex: nextAnswerIndex,
       answerChangeCount: (Number(previous.answerChangeCount) || 0) + 1,
-      answerChanges: [...changes, {
-        from: Number.isInteger(previous.answerIndex) ? previous.answerIndex : null,
-        to: Number.isInteger(nextAnswerIndex) ? nextAnswerIndex : null,
-        at,
-      }],
+      answerChanges: [
+        ...changes,
+        {
+          from: Number.isInteger(previous.answerIndex)
+            ? previous.answerIndex
+            : null,
+          to: Number.isInteger(nextAnswerIndex) ? nextAnswerIndex : null,
+          at,
+        },
+      ],
     },
   };
 }
@@ -396,18 +406,35 @@ export default function ExamExperience({
         restored.answers = Object.fromEntries(
           restoredQuestions.map((question) => {
             const answer = restored.answers[question.id] || {};
-            return [question.id, {
-              answerIndex: Number.isInteger(answer.answerIndex) ? answer.answerIndex : null,
-              visited: Boolean(answer.visited),
-              marked: Boolean(answer.marked),
-              timeSpentMs: Math.max(0, Number(answer.timeSpentMs) || 0),
-              visitCount: Math.max(0, Number(answer.visitCount) || (answer.visited ? 1 : 0)),
-              answerChangeCount: Math.max(0, Number(answer.answerChangeCount) || 0),
-              answerChanges: Array.isArray(answer.answerChanges) ? answer.answerChanges : [],
-              activeSince: question.id === restored.currentQuestionId && restored.status === "running"
-                ? (document.hidden ? null : Date.now())
-                : null,
-            }];
+            return [
+              question.id,
+              {
+                answerIndex: Number.isInteger(answer.answerIndex)
+                  ? answer.answerIndex
+                  : null,
+                visited: Boolean(answer.visited),
+                marked: Boolean(answer.marked),
+                timeSpentMs: Math.max(0, Number(answer.timeSpentMs) || 0),
+                visitCount: Math.max(
+                  0,
+                  Number(answer.visitCount) || (answer.visited ? 1 : 0),
+                ),
+                answerChangeCount: Math.max(
+                  0,
+                  Number(answer.answerChangeCount) || 0,
+                ),
+                answerChanges: Array.isArray(answer.answerChanges)
+                  ? answer.answerChanges
+                  : [],
+                activeSince:
+                  question.id === restored.currentQuestionId &&
+                  restored.status === "running"
+                    ? document.hidden
+                      ? null
+                      : Date.now()
+                    : null,
+              },
+            ];
           }),
         );
         setPaperId(savedExam.paperId);
@@ -451,7 +478,8 @@ export default function ExamExperience({
               ...prev.answers,
               [activeId]: {
                 ...answer,
-                timeSpentMs: Math.max(0, Number(answer.timeSpentMs) || 0) + elapsed,
+                timeSpentMs:
+                  Math.max(0, Number(answer.timeSpentMs) || 0) + elapsed,
                 activeSince: tickAt,
               },
             },
@@ -485,13 +513,19 @@ export default function ExamExperience({
         if (!prev || prev.status !== "running") return prev;
         const activeId = prev.currentQuestionId;
         if (document.hidden) {
-          return { ...prev, answers: stopQuestionClock(prev.answers, activeId, at) };
+          return {
+            ...prev,
+            answers: stopQuestionClock(prev.answers, activeId, at),
+          };
         }
         const answer = prev.answers[activeId];
         if (!answer || answer.activeSince) return prev;
         return {
           ...prev,
-          answers: { ...prev.answers, [activeId]: { ...answer, activeSince: at } },
+          answers: {
+            ...prev.answers,
+            [activeId]: { ...answer, activeSince: at },
+          },
         };
       });
     };
@@ -501,13 +535,20 @@ export default function ExamExperience({
       const at = Date.now();
       const paused = {
         ...current,
-        answers: stopQuestionClock(current.answers, current.currentQuestionId, at),
+        answers: stopQuestionClock(
+          current.answers,
+          current.currentQuestionId,
+          at,
+        ),
       };
       const { questions: examQuestions, ...persisted } = paused;
-      localStorage.setItem(ACTIVE_EXAM_KEY, JSON.stringify({
-        ...persisted,
-        questionIds: examQuestions.map((question) => question.id),
-      }));
+      localStorage.setItem(
+        ACTIVE_EXAM_KEY,
+        JSON.stringify({
+          ...persisted,
+          questionIds: examQuestions.map((question) => question.id),
+        }),
+      );
       setExam(paused);
     };
     document.addEventListener("visibilitychange", handleVisibility);
@@ -532,10 +573,14 @@ export default function ExamExperience({
       })
       .catch((error) => {
         if (!cancelled) {
-          setAttemptSaveError(error?.message || "Could not save this exam to analytics.");
+          setAttemptSaveError(
+            error?.message || "Could not save this exam to analytics.",
+          );
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [exam?.id, exam?.status, exam?.submittedAt]);
 
   const activeSections = exam?.sections || sections;
@@ -649,7 +694,11 @@ export default function ExamExperience({
         );
 
         // The final timed section has expired: submit automatically.
-        const stoppedAnswers = stopQuestionClock(prev.answers, prev.currentQuestionId, now);
+        const stoppedAnswers = stopQuestionClock(
+          prev.answers,
+          prev.currentQuestionId,
+          now,
+        );
         if (nextIndex < 0) {
           return {
             ...prev,
@@ -682,7 +731,8 @@ export default function ExamExperience({
             [nextQuestionId]: {
               ...stoppedAnswers[nextQuestionId],
               visited: true,
-              visitCount: (Number(stoppedAnswers[nextQuestionId]?.visitCount) || 0) + 1,
+              visitCount:
+                (Number(stoppedAnswers[nextQuestionId]?.visitCount) || 0) + 1,
               activeSince: document.hidden ? null : now,
             },
           },
@@ -816,7 +866,16 @@ export default function ExamExperience({
       answers: Object.fromEntries(
         paperQuestions.map((q) => [
           q.id,
-          { answerIndex: null, visited: q.id === first.id, marked: false, timeSpentMs: 0, visitCount: q.id === first.id ? 1 : 0, answerChangeCount: 0, answerChanges: [], activeSince: q.id === first.id ? start : null },
+          {
+            answerIndex: null,
+            visited: q.id === first.id,
+            marked: false,
+            timeSpentMs: 0,
+            visitCount: q.id === first.id ? 1 : 0,
+            answerChangeCount: 0,
+            answerChanges: [],
+            activeSince: q.id === first.id ? start : null,
+          },
         ]),
       ),
       sections: configuredSections,
@@ -847,7 +906,12 @@ export default function ExamExperience({
   }
 
   function navigateTo(questionId) {
-    if (!exam || exam.status !== "running" || questionId === exam.currentQuestionId) return;
+    if (
+      !exam ||
+      exam.status !== "running" ||
+      questionId === exam.currentQuestionId
+    )
+      return;
 
     const targetIndex = sectionByQuestion[questionId];
     const activeIndex = sectionByQuestion[exam.currentQuestionId] ?? 0;
@@ -882,7 +946,11 @@ export default function ExamExperience({
       if (prev.config?.sectionalTiming && targetIndex !== activeIndex)
         return prev;
       const at = Date.now();
-      const stoppedAnswers = stopQuestionClock(prev.answers, prev.currentQuestionId, at);
+      const stoppedAnswers = stopQuestionClock(
+        prev.answers,
+        prev.currentQuestionId,
+        at,
+      );
       return {
         ...prev,
         currentQuestionId: questionId,
@@ -891,7 +959,8 @@ export default function ExamExperience({
           [questionId]: {
             ...stoppedAnswers[questionId],
             visited: true,
-            visitCount: (Number(stoppedAnswers[questionId]?.visitCount) || 0) + 1,
+            visitCount:
+              (Number(stoppedAnswers[questionId]?.visitCount) || 0) + 1,
             activeSince: at,
           },
         },
@@ -944,7 +1013,11 @@ export default function ExamExperience({
       if (!prev || prev.status !== "running") return prev;
       return {
         ...prev,
-        answers: stopQuestionClock(prev.answers, prev.currentQuestionId, submittedAt),
+        answers: stopQuestionClock(
+          prev.answers,
+          prev.currentQuestionId,
+          submittedAt,
+        ),
         status: "submitted",
         submittedAt,
         finishReason: reason,
@@ -960,10 +1033,13 @@ export default function ExamExperience({
         answers: stopQuestionClock(exam.answers, exam.currentQuestionId, at),
       };
       const { questions: examQuestions, ...persisted } = paused;
-      localStorage.setItem(ACTIVE_EXAM_KEY, JSON.stringify({
-        ...persisted,
-        questionIds: examQuestions.map((question) => question.id),
-      }));
+      localStorage.setItem(
+        ACTIVE_EXAM_KEY,
+        JSON.stringify({
+          ...persisted,
+          questionIds: examQuestions.map((question) => question.id),
+        }),
+      );
       setExam(paused);
     }
     onClose?.();
@@ -1007,8 +1083,10 @@ export default function ExamExperience({
       <div className="exam-shell">
         <header className="exam-header">
           <div>
-            <span className="exam-eyebrow">PYPA · EXAM SIMULATION</span>
-            <h2>{exam ? exam.paperId : "Configure your exam"}</h2>
+            <h2>
+              <span className="exam-eyebrow">EXAM : </span>
+              {exam ? exam.paperId : "Configure your exam"}
+            </h2>
           </div>
           <button
             className="exam-icon-button"
@@ -1383,7 +1461,8 @@ export default function ExamExperience({
                       currentSectionExpired
                     }
                   >
-                    <ChevronLeft size={15} />Previous
+                    <ChevronLeft size={15} />
+                    Previous
                   </button>
                   {!nextQuestionId ? (
                     <button
@@ -1517,7 +1596,8 @@ export default function ExamExperience({
             </div>
             {attemptSaveError && (
               <p className="exam-warning" role="alert">
-                Analytics save failed: {attemptSaveError}. Keep this result open and retry by reloading the app before closing it.
+                Analytics save failed: {attemptSaveError}. Keep this result open
+                and retry by reloading the app before closing it.
               </p>
             )}
             <div className="exam-result-actions">

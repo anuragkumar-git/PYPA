@@ -2325,8 +2325,12 @@ function App() {
           </p>
         </div>
         <div className="topbar-actions">
-          <button className="button analytics-nav-button" onClick={() => setAnalyticsOpen((open) => !open)}>
-            <BarChart3 size={16} /> {analyticsOpen ? "Question bank" : "Analytics"}
+          <button
+            className="button analytics-nav-button"
+            onClick={() => setAnalyticsOpen((open) => !open)}
+          >
+            <BarChart3 size={16} />{" "}
+            {analyticsOpen ? "Question bank" : "Analytics"}
           </button>
         </div>
         {/* <div className="button-row">
@@ -2341,460 +2345,467 @@ function App() {
       </header>
 
       {analyticsOpen ? (
-        <AnalyticsDashboard papers={paperRecords} onBack={() => setAnalyticsOpen(false)} />
+        <AnalyticsDashboard
+          papers={paperRecords}
+          onBack={() => setAnalyticsOpen(false)}
+        />
       ) : (
-      <main className="layout">
-        {/* Mobile-only toggle; hidden on desktop by index.css. */}
-        <button
-          type="button"
-          className="button outline sidebar-toggle"
-          onClick={() => setSidebarOpen((open) => !open)}
-          aria-expanded={sidebarOpen}
-          aria-controls="app-sidebar"
-        >
-          {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
-          {sidebarOpen ? "Hide sidebar" : "Import / Practice menu"}
-        </button>
+        <main className="layout">
+          {/* Mobile-only toggle; hidden on desktop by index.css. */}
+          <button
+            type="button"
+            className="button outline sidebar-toggle"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-expanded={sidebarOpen}
+            aria-controls="app-sidebar"
+          >
+            {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
+            {sidebarOpen ? "Hide sidebar" : "Import / Practice menu"}
+          </button>
 
-        {/* Desktop sidebar remains visible; mobile visibility follows sidebarOpen. */}
-        <aside
-          id="app-sidebar"
-          className={`sidebar panel ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}
-        >
-          <h2>Import question bank</h2>
-          <p className="section-subtitle">
-            Start empty. Import one JSON question array or a ZIP containing
-            questions.json and its image folder.
-          </p>
-          <label className="file-label">
-            <span className="button primary full">
-              <Upload size={16} /> Choose JSON or ZIP
-            </span>
-            <input
-              type="file"
-              accept=".json,.zip,application/json,application/zip"
-              onChange={handleImport}
-              disabled={dbBusy}
-            />
-          </label>
-          {dbBusy && (
-            <p role="status" className="inline-message">
-              Validating and importing…
+          {/* Desktop sidebar remains visible; mobile visibility follows sidebarOpen. */}
+          <aside
+            id="app-sidebar"
+            className={`sidebar panel ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}
+          >
+            <h2>Import question bank</h2>
+            <p className="section-subtitle">
+              Start empty. Import one JSON question array or a ZIP containing
+              questions.json and its image folder.
             </p>
-          )}
-          {dbMessage && (
-            <div className="alert" role="status">
-              <AlertTriangle size={16} />
-              <span>{dbMessage}</span>
-              <button
-                className="icon-button"
-                onClick={() => setDbMessage("")}
-                aria-label="Dismiss error"
+            <label className="file-label">
+              <span className="button primary full">
+                <Upload size={16} /> Choose JSON or ZIP
+              </span>
+              <input
+                type="file"
+                accept=".json,.zip,application/json,application/zip"
+                onChange={handleImport}
+                disabled={dbBusy}
+              />
+            </label>
+            {dbBusy && (
+              <p role="status" className="inline-message">
+                Validating and importing…
+              </p>
+            )}
+            {dbMessage && (
+              <div className="alert" role="status">
+                <AlertTriangle size={16} />
+                <span>{dbMessage}</span>
+                <button
+                  className="icon-button"
+                  onClick={() => setDbMessage("")}
+                  aria-label="Dismiss error"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+            {loadError && (
+              <div className="alert" role="alert">
+                <AlertTriangle size={16} />
+                <span>{loadError}</span>
+                <button
+                  className="icon-button"
+                  onClick={() => setLoadError("")}
+                  aria-label="Dismiss error"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+            <div className="separator" />
+            <h2>Practice setup</h2>
+            <label>
+              Subject
+              <select
+                value={subject}
+                onChange={(e) => {
+                  setSubject(e.target.value);
+                  setTopic("All");
+                }}
               >
-                <X size={15} />
+                {/* <option value="Focus">Maths + Reasoning + Science</option> */}
+                <option value="All">All subjects</option>
+                {subjects.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Paper
+              <select
+                value={paper}
+                onChange={(e) => {
+                  setPaper(e.target.value);
+                  setTopic("All");
+                }}
+              >
+                <option value="All">All papers</option>
+                {papers.map((id) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Topic
+              <select value={topic} onChange={(e) => setTopic(e.target.value)}>
+                <option value="All">All topics</option>
+                {availableTopics.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Mode
+              <select value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="unseen">Unseen first</option>
+                <option value="wrong">Wrong answers</option>
+                <option value="all">All · unseen then repeats</option>
+                <option value="review">Marked for review</option>
+              </select>
+            </label>
+            <label>
+              Session size
+              <select value={size} onChange={(e) => setSize(e.target.value)}>
+                {["10", "20", "30", "50", "100"].map((n) => (
+                  <option key={n}>{n}</option>
+                ))}
+              </select>
+            </label>
+            <div className="button-row">
+              <button
+                className="button primary"
+                onClick={() => startSession(false)}
+                disabled={!bank.length || dbBusy}
+              >
+                Start session
+              </button>
+              <button
+                className="button outline"
+                title="Shuffle questions"
+                onClick={() => startSession(true)}
+                disabled={!bank.length || dbBusy}
+              >
+                <Shuffle size={16} />
               </button>
             </div>
-          )}
-          {loadError && (
-            <div className="alert" role="alert">
-              <AlertTriangle size={16} />
-              <span>{loadError}</span>
-              <button
-                className="icon-button"
-                onClick={() => setLoadError("")}
-                aria-label="Dismiss error"
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-          <div className="separator" />
-          <h2>Practice setup</h2>
-          <label>
-            Subject
-            <select
-              value={subject}
-              onChange={(e) => {
-                setSubject(e.target.value);
-                setTopic("All");
-              }}
-            >
-              {/* <option value="Focus">Maths + Reasoning + Science</option> */}
-              <option value="All">All subjects</option>
-              {subjects.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Paper
-            <select
-              value={paper}
-              onChange={(e) => {
-                setPaper(e.target.value);
-                setTopic("All");
-              }}
-            >
-              <option value="All">All papers</option>
-              {papers.map((id) => (
-                <option key={id} value={id}>
-                  {id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Topic
-            <select value={topic} onChange={(e) => setTopic(e.target.value)}>
-              <option value="All">All topics</option>
-              {availableTopics.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Mode
-            <select value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="unseen">Unseen first</option>
-              <option value="wrong">Wrong answers</option>
-              <option value="all">All · unseen then repeats</option>
-              <option value="review">Marked for review</option>
-            </select>
-          </label>
-          <label>
-            Session size
-            <select value={size} onChange={(e) => setSize(e.target.value)}>
-              {["10", "20", "30", "50", "100"].map((n) => (
-                <option key={n}>{n}</option>
-              ))}
-            </select>
-          </label>
-          <div className="button-row">
             <button
-              className="button primary"
-              onClick={() => startSession(false)}
-              disabled={!bank.length || dbBusy}
-            >
-              Start session
-            </button>
-            <button
-              className="button outline"
-              title="Shuffle questions"
-              onClick={() => startSession(true)}
-              disabled={!bank.length || dbBusy}
-            >
-              <Shuffle size={16} />
-            </button>
-          </div>
-          <button
-            className="button primary full exam-launch-button"
-            onClick={() => setExamOpen(true)}
-            disabled={
-              !bank.some(
-                (q) =>
-                  q.practiceReady &&
-                  !q.visualReviewNeeded &&
-                  Number.isInteger(q.correctAnswerIndex),
-              )
-            }
-          >
-            <Clock3 size={15} /> Exam simulation
-          </button>
-          <p className="fineprint">
-            Timed exam mode with section controls, question palette and deferred
-            scoring.
-          </p>
-          <div className="separator" />
-          <h2>Overall coverage</h2>
-          <div className="stats">
-            <div>
-              <small>Questions</small>
-              <b>{bank.length}</b>
-            </div>
-            <div>
-              <small>Covered</small>
-              <b>{attemptedQuestions.length}</b>
-            </div>
-            <div>
-              <small>Accuracy</small>
-              <b>
-                {allTries
-                  ? `${Math.round((correctTries / allTries) * 100)}%`
-                  : "—"}
-              </b>
-            </div>
-          </div>
-          <div className="overall-progress">
-            <span
-              style={{
-                width: `${bank.length ? (attemptedQuestions.length / bank.length) * 100 : 0}%`,
-              }}
-            />
-          </div>
-          <label className="file-label">
-            Import progress backup
-            <input
-              type="file"
-              accept=".json,application/json"
-              onChange={importProgress}
-              disabled={dbBusy || !bank.length}
-            />
-          </label>
-          {importMessage && (
-            <p className="inline-message" role="status">
-              {importMessage}
-            </p>
-          )}
-
-          <button
-            className="button outline full"
-            onClick={() => exportQuestionBank("all")}
-            disabled={!bank.length || dbBusy}
-          >
-            <Download size={14} /> Export all papers (ZIP)
-          </button>
-
-          <button
-            className="button outline full"
-            onClick={() => exportQuestionBank("paper")}
-            disabled={!bank.some((q) => q.paperId === coveragePaper) || dbBusy}
-          >
-            <Download size={14} /> Export selected paper (ZIP)
-          </button>
-
-          <button
-            className="button ghost full"
-            onClick={() => {
-              if (
-                window.confirm(
-                  "Reset all saved attempts, review marks, and notes?",
+              className="button primary full exam-launch-button"
+              onClick={() => setExamOpen(true)}
+              disabled={
+                !bank.some(
+                  (q) =>
+                    q.practiceReady &&
+                    !q.visualReviewNeeded &&
+                    Number.isInteger(q.correctAnswerIndex),
                 )
-              ) {
-                setProgress({});
-                localStorage.removeItem(PROGRESS_KEY);
               }
-            }}
-            disabled={!bank.length}
-          >
-            <RotateCcw size={14} /> Reset progress
-          </button>
-          <p className="fineprint">
-            Questions and extracted images persist in this browser. Export
-            backups before clearing browser data. This app does not sync between
-            devices.
-          </p>
-        </aside>
-
-        {/* Target for scrolling to question-review warnings. */}
-        <section className="main-column" id="main-content">
-          {sessionError && (
-            <div className="alert" role="status">
-              <AlertTriangle size={16} />
-              <span>{sessionError}</span>
-              <button
-                className="icon-button"
-                onClick={() => setSessionError("")}
-                aria-label="Dismiss error"
-              >
-                <X size={15} />
-              </button>
+            >
+              <Clock3 size={15} /> Exam simulation
+            </button>
+            <p className="fineprint">
+              Timed exam mode with section controls, question palette and
+              deferred scoring.
+            </p>
+            <div className="separator" />
+            <h2>Overall coverage</h2>
+            <div className="stats">
+              <div>
+                <small>Questions</small>
+                <b>{bank.length}</b>
+              </div>
+              <div>
+                <small>Covered</small>
+                <b>{attemptedQuestions.length}</b>
+              </div>
+              <div>
+                <small>Accuracy</small>
+                <b>
+                  {allTries
+                    ? `${Math.round((correctTries / allTries) * 100)}%`
+                    : "—"}
+                </b>
+              </div>
             </div>
-          )}
-          {/* Target for scrolling directly to the opened question. */}
-          <section className="panel quiz-panel" id="quiz-panel">
-            {!current ? (
-              completedSession ? (
-                <div className="completion">
-                  <CheckCircle2 size={38} />
-                  <h2>Session complete</h2>
-                  <p>
-                    You answered {completedSession.answered} of{" "}
-                    {completedSession.total} questions.
-                  </p>
-                  <div className="completion-stats">
-                    <div>
-                      <b>{completedSession.correct}</b>
-                      <small>Correct</small>
-                    </div>
-                    <div>
-                      <b>{completedSession.incorrect}</b>
-                      <small>Incorrect</small>
-                    </div>
-                    <div>
-                      <b>
-                        {completedSession.answered
-                          ? `${Math.round((completedSession.correct / completedSession.answered) * 100)}%`
-                          : "—"}
-                      </b>
-                      <small>Accuracy</small>
-                    </div>
-                  </div>
-                  <button
-                    className="button primary"
-                    onClick={() => startSession(false)}
-                  >
-                    Start another session
-                  </button>
-                </div>
-              ) : (
-                <div className="empty">
-                  {bank.length ? (
-                    <CircleHelp size={34} />
-                  ) : (
-                    <FileJson size={36} />
-                  )}
-                  <h2>
-                    {bank.length
-                      ? "Ready to practise"
-                      : "Your question bank is empty"}
-                  </h2>
-                  <p>
-                    {bank.length
-                      ? "Choose filters and start a session. Incomplete questions remain in Paper coverage for review."
-                      : "Upload a JSON array of questions, or a ZIP containing questions.json and all referenced images. Nothing is seeded automatically."}
-                  </p>
-                  {!bank.length && (
+            <div className="overall-progress">
+              <span
+                style={{
+                  width: `${bank.length ? (attemptedQuestions.length / bank.length) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <label className="file-label">
+              Import progress backup
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={importProgress}
+                disabled={dbBusy || !bank.length}
+              />
+            </label>
+            {importMessage && (
+              <p className="inline-message" role="status">
+                {importMessage}
+              </p>
+            )}
+
+            <button
+              className="button outline full"
+              onClick={() => exportQuestionBank("all")}
+              disabled={!bank.length || dbBusy}
+            >
+              <Download size={14} /> Export all papers (ZIP)
+            </button>
+
+            <button
+              className="button outline full"
+              onClick={() => exportQuestionBank("paper")}
+              disabled={
+                !bank.some((q) => q.paperId === coveragePaper) || dbBusy
+              }
+            >
+              <Download size={14} /> Export selected paper (ZIP)
+            </button>
+
+            <button
+              className="button ghost full"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Reset all saved attempts, review marks, and notes?",
+                  )
+                ) {
+                  setProgress({});
+                  localStorage.removeItem(PROGRESS_KEY);
+                }
+              }}
+              disabled={!bank.length}
+            >
+              <RotateCcw size={14} /> Reset progress
+            </button>
+            <p className="fineprint">
+              Questions and extracted images persist in this browser. Export
+              backups before clearing browser data. This app does not sync
+              between devices.
+            </p>
+          </aside>
+
+          {/* Target for scrolling to question-review warnings. */}
+          <section className="main-column" id="main-content">
+            {sessionError && (
+              <div className="alert" role="status">
+                <AlertTriangle size={16} />
+                <span>{sessionError}</span>
+                <button
+                  className="icon-button"
+                  onClick={() => setSessionError("")}
+                  aria-label="Dismiss error"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+            {/* Target for scrolling directly to the opened question. */}
+            <section className="panel quiz-panel" id="quiz-panel">
+              {!current ? (
+                completedSession ? (
+                  <div className="completion">
+                    <CheckCircle2 size={38} />
+                    <h2>Session complete</h2>
                     <p>
-                      <strong>Accepted:</strong> .json or .zip
+                      You answered {completedSession.answered} of{" "}
+                      {completedSession.total} questions.
                     </p>
-                  )}
-                  {bank.length > 0 && (
+                    <div className="completion-stats">
+                      <div>
+                        <b>{completedSession.correct}</b>
+                        <small>Correct</small>
+                      </div>
+                      <div>
+                        <b>{completedSession.incorrect}</b>
+                        <small>Incorrect</small>
+                      </div>
+                      <div>
+                        <b>
+                          {completedSession.answered
+                            ? `${Math.round((completedSession.correct / completedSession.answered) * 100)}%`
+                            : "—"}
+                        </b>
+                        <small>Accuracy</small>
+                      </div>
+                    </div>
                     <button
                       className="button primary"
                       onClick={() => startSession(false)}
                     >
-                      Start session
+                      Start another session
                     </button>
-                  )}
-                </div>
-              )
-            ) : (
-              <>
-                <div className="question-meta">
-                  <span>
-                    {idx + 1} / {session.length} · {current.id}
-                  </span>
-                  <span>
-                    {current.paperId} · Q{current.questionNumber}
-                  </span>
-                </div>
-                <div className="overall-progress">
-                  <span
-                    style={{ width: `${((idx + 1) / session.length) * 100}%` }}
-                  />
-                </div>
-                <div className="tags">
-                  <span>{current.subject || "Unclassified"}</span>
-                  <span>{current.topic || "Unclassified"}</span>
-                  <span
-                    className={
-                      getState(progress, current).attempts.length
-                        ? "tag-covered"
-                        : "tag-uncovered"
-                    }
-                  >
-                    {getState(progress, current).attempts.length
-                      ? "Covered"
-                      : "Uncovered"}
-                  </span>
-                  {current.answerValidation === "source-key-unverified" && (
-                    <span className="tag-warning">Key unverified</span>
-                  )}
-                </div>
-                <div className="question-text">
-                  {current.question ||
-                    "Question text missing — review the source."}
-                </div>
-                {current.questionImage && (
-                  <div className="source-image-wrap">
-                    {renderImage(
-                      current.questionImage,
-                      `Question ${current.questionNumber}`,
-                      "question-image",
-                      current.paperId,
+                  </div>
+                ) : (
+                  <div className="empty">
+                    {bank.length ? (
+                      <CircleHelp size={34} />
+                    ) : (
+                      <FileJson size={36} />
                     )}
-                  </div>
-                )}
-                {current.reviewReasons?.length > 0 && (
-                  <div className="alert">
-                    <AlertTriangle size={16} />
-                    <span>
-                      Review required: {current.reviewReasons.join("; ")}
-                    </span>
-                  </div>
-                )}
-                <div className="options">
-                  {(current.options || []).map((option, i) => {
-                    const imageOption = isImagePath(option);
-                    let cls = "option";
-                    if (selected === i) cls += " selected";
-                    if (checked && i === current.correctAnswerIndex)
-                      cls += " correct";
-                    else if (checked && selected === i) cls += " incorrect";
-                    return (
+                    <h2>
+                      {bank.length
+                        ? "Ready to practise"
+                        : "Your question bank is empty"}
+                    </h2>
+                    <p>
+                      {bank.length
+                        ? "Choose filters and start a session. Incomplete questions remain in Paper coverage for review."
+                        : "Upload a JSON array of questions, or a ZIP containing questions.json and all referenced images. Nothing is seeded automatically."}
+                    </p>
+                    {!bank.length && (
+                      <p>
+                        <strong>Accepted:</strong> .json or .zip
+                      </p>
+                    )}
+                    {bank.length > 0 && (
                       <button
-                        key={`${current.id}-${i}`}
-                        className={cls}
-                        onClick={() => !checked && setSelected(i)}
-                        disabled={checked}
+                        className="button primary"
+                        onClick={() => startSession(false)}
                       >
-                        <span className="option-label">{LABELS[i]}</span>
-                        {imageOption ? (
-                          renderImage(
-                            option,
-                            `Option ${LABELS[i]}`,
-                            "option-image",
-                            current.paperId,
-                          )
-                        ) : (
-                          <span>
-                            {option || (
-                              <em>Option text missing — review required</em>
-                            )}
-                            {current.optionImageSources?.[i] &&
-                              renderImage(
-                                current.optionImageSources[i],
-                                `Option ${LABELS[i]} image`,
-                                "option-image",
-                                current.paperId,
-                              )}
-                          </span>
-                        )}
+                        Start session
                       </button>
-                    );
-                  })}
-                </div>
-                {checked && (
-                  <div
-                    className={`feedback ${selected === current.correctAnswerIndex ? "success" : "error"}`}
-                  >
-                    <strong>
-                      {selected === current.correctAnswerIndex
-                        ? "Correct"
-                        : "Incorrect"}
-                    </strong>
-                    <span>
-                      Answer:{" "}
-                      {Number.isInteger(current.correctAnswerIndex)
-                        ? isImagePath(
-                            current.options[current.correctAnswerIndex],
-                          )
-                          ? `Option ${LABELS[current.correctAnswerIndex]}`
-                          : current.correctAnswer ||
-                            current.options[current.correctAnswerIndex]
-                        : "Answer key unavailable"}
-                    </span>
-                    {current.notes && <small>{current.notes}</small>}
-                    {current.answerValidation === "source-key-unverified" && (
-                      <small>
-                        Answer key has not been independently verified.
-                      </small>
                     )}
                   </div>
-                )}
-                {/* <label className="note-label">
+                )
+              ) : (
+                <>
+                  <div className="question-meta">
+                    <span>
+                      {idx + 1} / {session.length} · {current.id}
+                    </span>
+                    <span>
+                      {current.paperId} · Q{current.questionNumber}
+                    </span>
+                  </div>
+                  <div className="overall-progress">
+                    <span
+                      style={{
+                        width: `${((idx + 1) / session.length) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="tags">
+                    <span>{current.subject || "Unclassified"}</span>
+                    <span>{current.topic || "Unclassified"}</span>
+                    <span
+                      className={
+                        getState(progress, current).attempts.length
+                          ? "tag-covered"
+                          : "tag-uncovered"
+                      }
+                    >
+                      {getState(progress, current).attempts.length
+                        ? "Covered"
+                        : "Uncovered"}
+                    </span>
+                    {current.answerValidation === "source-key-unverified" && (
+                      <span className="tag-warning">Key unverified</span>
+                    )}
+                  </div>
+                  <div className="question-text">
+                    {current.question ||
+                      "Question text missing — review the source."}
+                  </div>
+                  {current.questionImage && (
+                    <div className="source-image-wrap">
+                      {renderImage(
+                        current.questionImage,
+                        `Question ${current.questionNumber}`,
+                        "question-image",
+                        current.paperId,
+                      )}
+                    </div>
+                  )}
+                  {current.reviewReasons?.length > 0 && (
+                    <div className="alert">
+                      <AlertTriangle size={16} />
+                      <span>
+                        Review required: {current.reviewReasons.join("; ")}
+                      </span>
+                    </div>
+                  )}
+                  <div className="options">
+                    {(current.options || []).map((option, i) => {
+                      const imageOption = isImagePath(option);
+                      let cls = "option";
+                      if (selected === i) cls += " selected";
+                      if (checked && i === current.correctAnswerIndex)
+                        cls += " correct";
+                      else if (checked && selected === i) cls += " incorrect";
+                      return (
+                        <button
+                          key={`${current.id}-${i}`}
+                          className={cls}
+                          onClick={() => !checked && setSelected(i)}
+                          disabled={checked}
+                        >
+                          <span className="option-label">{LABELS[i]}</span>
+                          {imageOption ? (
+                            renderImage(
+                              option,
+                              `Option ${LABELS[i]}`,
+                              "option-image",
+                              current.paperId,
+                            )
+                          ) : (
+                            <span>
+                              {option || (
+                                <em>Option text missing — review required</em>
+                              )}
+                              {current.optionImageSources?.[i] &&
+                                renderImage(
+                                  current.optionImageSources[i],
+                                  `Option ${LABELS[i]} image`,
+                                  "option-image",
+                                  current.paperId,
+                                )}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {checked && (
+                    <div
+                      className={`feedback ${selected === current.correctAnswerIndex ? "success" : "error"}`}
+                    >
+                      <strong>
+                        {selected === current.correctAnswerIndex
+                          ? "Correct"
+                          : "Incorrect"}
+                      </strong>
+                      <span>
+                        Answer:{" "}
+                        {Number.isInteger(current.correctAnswerIndex)
+                          ? isImagePath(
+                              current.options[current.correctAnswerIndex],
+                            )
+                            ? `Option ${LABELS[current.correctAnswerIndex]}`
+                            : current.correctAnswer ||
+                              current.options[current.correctAnswerIndex]
+                          : "Answer key unavailable"}
+                      </span>
+                      {current.notes && <small>{current.notes}</small>}
+                      {current.answerValidation === "source-key-unverified" && (
+                        <small>
+                          Answer key has not been independently verified.
+                        </small>
+                      )}
+                    </div>
+                  )}
+                  {/* <label className="note-label">
                    Memory trick / explanation note
                    <textarea
                      value={noteDraft}
@@ -2810,464 +2821,557 @@ function App() {
                      placeholder="Shortcut, mnemonic, or explanation…"
                    />
                  </label> */}
-                <div className="button-row question-controls">
-                  <button
-                    className="button outline"
-                    onClick={previous}
-                    disabled={idx === 0}
-                  >
-                    <ChevronLeft size={16} /> Previous
-                  </button>
-                  <button
-                    className="button outline"
-                    onClick={() => toggleMark()}
-                  >
-                    <Bookmark size={16} />
-                    {currentState?.marked ? "Unmark" : "Review"}
-                  </button>
-                  {/* <button className="button outline" onClick={() => saveNote()}>
+                  <div className="button-row question-controls">
+                    <button
+                      className="button outline"
+                      onClick={previous}
+                      disabled={idx === 0}
+                    >
+                      <ChevronLeft size={16} /> Previous
+                    </button>
+                    <button
+                      className="button outline"
+                      onClick={() => toggleMark()}
+                    >
+                      <Bookmark size={16} />
+                      {currentState?.marked ? "Unmark" : "Review"}
+                    </button>
+                    {/* <button className="button outline" onClick={() => saveNote()}>
                     <Save size={15} /> Save note
                   </button> */}
-                  {!checked ? (
-                    <button
-                      className="button primary"
-                      onClick={checkAnswer}
-                      disabled={selected === null}
-                    >
-                      Check answer
-                    </button>
-                  ) : (
-                    <button className="button primary" onClick={next}>
-                      {idx === session.length - 1 ? "Finish" : "Next"}{" "}
-                      <ChevronRight size={16} />
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
-
-          <section className="panel coverage-panel">
-            <div className="section-heading">
-              <div>
-                <h2>Paper-wise coverage</h2>
-                <p className="section-subtitle">
-                  Add papers and questions manually, or import an existing
-                  question bank. Incomplete questions remain available for
-                  review.
-                </p>
-              </div>
-
-              <div className="coverage-actions">
-                <button
-                  className="button primary"
-                  disabled={dbBusy}
-                  onClick={() => {
-                    setPaperForm({
-                      id: "",
-                      date: "",
-                      shift: "",
-                      paperFile: "",
-                    });
-                    setManualPaperOpen((open) => !open);
-                    setResponseSheetOpen(false);
-                    setManualEntryOpen(false);
-                  }}
-                >
-                  <Plus size={14} /> Add paper
-                </button>
-
-                <button
-                  className="button outline"
-                  disabled={dbBusy}
-                  onClick={() => {
-                    setResponseSheetOpen((open) => !open);
-                    setManualPaperOpen(false);
-                    setManualEntryOpen(false);
-                    setResponseSheetError("");
-                  }}
-                >
-                  <Upload size={14} /> Import response sheet
-                </button>
-
-                <button
-                  className="button outline"
-                  disabled={dbBusy}
-                  onClick={() => {
-                    setTaxonomySubject(
-                      manualQuestionDraft?.subject || subjects[0] || "",
-                    );
-                    setCategoryManagerOpen((open) => !open);
-                  }}
-                >
-                  <Tags size={14} /> Manage subjects & topics
-                </button>
-
-                <button
-                  className="button ghost"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Reset all saved attempts, review marks, and notes?",
-                      )
-                    ) {
-                      setProgress({});
-                    }
-                  }}
-                  disabled={!bank.length}
-                >
-                  <RotateCcw size={14} /> Reset progress
-                </button>
-              </div>
-            </div>
-            {manualPaperOpen && (
-              <div className="manual-builder">
-                <div className="manual-builder-heading">
-                  <div>
-                    <h3>Create a new paper</h3>
-                    <p>
-                      Enter the paper details first. You will add its questions
-                      individually after creating it.
-                    </p>
+                    {!checked ? (
+                      <button
+                        className="button primary"
+                        onClick={checkAnswer}
+                        disabled={selected === null}
+                      >
+                        Check answer
+                      </button>
+                    ) : (
+                      <button className="button primary" onClick={next}>
+                        {idx === session.length - 1 ? "Finish" : "Next"}{" "}
+                        <ChevronRight size={16} />
+                      </button>
+                    )}
                   </div>
+                </>
+              )}
+            </section>
 
-                  <button
-                    className="icon-button"
-                    onClick={() => setManualPaperOpen(false)}
-                    aria-label="Close paper form"
-                  >
-                    <X size={17} />
-                  </button>
-                </div>
-
-                <div className="manual-form-grid">
-                  <label>
-                    Paper ID <span className="required-mark">*</span>
-                    <input
-                      type="text"
-                      value={paperForm.id}
-                      onChange={(e) =>
-                        setPaperForm((p) => ({
-                          ...p,
-                          id: e.target.value,
-                        }))
-                      }
-                      placeholder="RRB-JE-2024-S1"
-                      maxLength={80}
-                    />
-                    <small>
-                      Use letters, numbers, hyphens, or underscores.
-                    </small>
-                  </label>
-
-                  <label>
-                    Exam date
-                    <input
-                      type="date"
-                      value={paperForm.date}
-                      onChange={(e) =>
-                        setPaperForm((p) => ({
-                          ...p,
-                          date: e.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-
-                  <label>
-                    Shift
-                    <input
-                      type="text"
-                      value={paperForm.shift}
-                      onChange={(e) =>
-                        setPaperForm((p) => ({
-                          ...p,
-                          shift: e.target.value,
-                        }))
-                      }
-                      placeholder="Shift 1 / 09:00–10:30"
-                    />
-                  </label>
-
-                  <label>
-                    Source PDF filename
-                    <input
-                      type="text"
-                      value={paperForm.paperFile}
-                      onChange={(e) =>
-                        setPaperForm((p) => ({
-                          ...p,
-                          paperFile: e.target.value,
-                        }))
-                      }
-                      placeholder="rrb-je-2024-shift-1.pdf"
-                    />
-                  </label>
-                </div>
-
-                <div className="button-row manual-action-row">
-                  <button
-                    className="button primary"
-                    onClick={handleCreateManualPaper}
-                    disabled={dbBusy}
-                  >
-                    <Plus size={15} /> Create paper & add questions
-                  </button>
-
-                  <button
-                    className="button outline"
-                    onClick={() => setManualPaperOpen(false)}
-                    disabled={dbBusy}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {responseSheetOpen && (
-              <div className="manual-builder">
-                <div className="manual-builder-heading">
-                  <div>
-                    <h3>Import TCS iON / Digialm response sheet</h3>
-                    <p>
-                      Import a saved HTML response sheet or fetch its page URL.
-                      Both inputs use the same TCS iON / Digialm parser.
-                    </p>
-                  </div>
-                  <button
-                    className="icon-button"
-                    onClick={() => {
-                      setResponseSheetOpen(false);
-                      setResponseSheetFile(null);
-                      setResponseSheetHtml("");
-                      setResponseSheetUrl("");
-                      setResponseSheetSourceLabel("");
-                      setResponseSheetPreview(null);
-                      setResponseSheetError("");
-                    }}
-                    aria-label="Close response-sheet importer"
-                  >
-                    <X size={17} />
-                  </button>
-                </div>
-
-                <div className="manual-form-grid">
-                  <label>
-                    Paper ID <span className="required-mark">*</span>
-                    <input
-                      type="text"
-                      value={responseSheetPaperId}
-                      onChange={(e) =>
-                        setResponseSheetPaperId(
-                          e.target.value.replace(/\s+/g, "-"),
-                        )
-                      }
-                      placeholder="RRB-JE-2026-10-27-S1"
-                      maxLength={80}
-                    />
-                    <small>
-                      Unique ID used to identify this paper in PYPA.
-                    </small>
-                  </label>
-
-                  <label className="response-url-field">
-                    Response-sheet URL
-                    <input
-                      type="url"
-                      value={responseSheetUrl}
-                      onChange={(e) => setResponseSheetUrl(e.target.value)}
-                      placeholder="https://rrb.digialm.com/..."
-                      disabled={dbBusy}
-                    />
-                    <small>
-                      Paste the full response-sheet page URL. URL fetching
-                      requires the configured Worker endpoint.
-                    </small>
-                    <button
-                      type="button"
-                      className="button outline"
-                      onClick={handleFetchResponseSheetUrl}
-                      disabled={dbBusy || !responseSheetUrl.trim()}
-                    >
-                      <Download size={14} />{" "}
-                      {dbBusy ? "Fetching…" : "Fetch from URL"}
-                    </button>
-                  </label>
-                  <label>
-                    HTML response sheet <span className="required-mark">*</span>
-                    <input
-                      type="file"
-                      accept=".html,.htm,text/html"
-                      onChange={handleResponseSheetFileChange}
-                      disabled={dbBusy}
-                    />
-                    <small>
-                      Upload a saved .html or .htm file, or use the URL field
-                      above.
-                    </small>
-                  </label>
-                </div>
-
-                {responseSheetError && (
-                  <div className="alert" role="alert">
-                    <AlertTriangle size={16} />
-                    <span>{responseSheetError}</span>
-                  </div>
-                )}
-
-                {responseSheetPreview && (
-                  <div className="stats">
-                    <div>
-                      <small>Questions found</small>
-                      <b>{responseSheetPreview.metadata.totalQuestions}</b>
-                    </div>
-                    <div>
-                      <small>Embedded images</small>
-                      <b>{responseSheetPreview.imageEntries.length}</b>
-                    </div>
-                    <div>
-                      <small>Needs review</small>
-                      <b>{responseSheetPreview.questionIssues.length}</b>
-                    </div>
-                  </div>
-                )}
-
-                {responseSheetPreview?.metadata && (
+            <section className="panel coverage-panel">
+              <div className="section-heading">
+                <div>
+                  <h2>Paper-wise coverage</h2>
                   <p className="section-subtitle">
-                    <strong>
-                      {responseSheetPreview.metadata.examGroup ||
-                        "Exam group not detected"}
-                    </strong>
-                    {" · "}
-                    {responseSheetPreview.metadata.dateText ||
-                      "Date not detected"}
-                    {" · "}
-                    {responseSheetPreview.metadata.shift ||
-                      "Shift not detected"}
-                    {responseSheetSourceLabel && (
-                      <>
-                        {" "}
-                        Source:{" "}
-                        <span
-                          title={responseSheetSourceLabel}
-                          style={{
-                            display: "inline-block",
-                            maxWidth: "200px",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            verticalAlign: "bottom",
-                          }}
-                        >
-                          {responseSheetSourceLabel}
-                        </span>
-                      </>
-                    )}
-                    {responseSheetPreview.questionIssues.length > 0 && (
-                      <>
-                        {" · "}
-                        {responseSheetPreview.questionIssues.length} question(s)
-                        contain structural issues and will be flagged for
-                        review.
-                      </>
-                    )}
+                    Add papers and questions manually, or import an existing
+                    question bank. Incomplete questions remain available for
+                    review.
                   </p>
-                )}
+                </div>
 
-                <div className="button-row manual-action-row">
+                <div className="coverage-actions">
                   <button
                     className="button primary"
-                    onClick={handleImportResponseSheet}
-                    disabled={
-                      dbBusy ||
-                      !responseSheetHtml ||
-                      !responseSheetPaperId.trim()
-                    }
+                    disabled={dbBusy}
+                    onClick={() => {
+                      setPaperForm({
+                        id: "",
+                        date: "",
+                        shift: "",
+                        paperFile: "",
+                      });
+                      setManualPaperOpen((open) => !open);
+                      setResponseSheetOpen(false);
+                      setManualEntryOpen(false);
+                    }}
                   >
-                    <Upload size={15} />{" "}
-                    {dbBusy ? "Importing…" : "Import questions"}
+                    <Plus size={14} /> Add paper
                   </button>
+
                   <button
                     className="button outline"
+                    disabled={dbBusy}
                     onClick={() => {
-                      setResponseSheetOpen(false);
-                      setResponseSheetFile(null);
-                      setResponseSheetHtml("");
-                      setResponseSheetUrl("");
-                      setResponseSheetSourceLabel("");
-                      setResponseSheetPreview(null);
-                      setResponseSheetPaperId("");
+                      setResponseSheetOpen((open) => !open);
+                      setManualPaperOpen(false);
+                      setManualEntryOpen(false);
                       setResponseSheetError("");
                     }}
-                    disabled={dbBusy}
                   >
-                    Cancel
+                    <Upload size={14} /> Import response sheet
                   </button>
-                </div>
-                <p className="fineprint">
-                  The parser supports the common TCS iON / Digialm
-                  response-sheet layout. Embedded images are stored locally;
-                  linked Digialm images remain as full source URLs. Green
-                  official-answer markers are imported as source-key-verified.
-                  URL fetching uses a restricted server-side Worker because
-                  Digialm blocks direct browser requests with CORS.
-                </p>
-              </div>
-            )}
-
-            {categoryManagerOpen && (
-              <div className="category-manager">
-                <div className="manual-builder-heading">
-                  <div>
-                    <h3>Manage subjects & topics</h3>
-                    <p>
-                      Create categories here. Question entry uses dropdowns, so
-                      you cannot accidentally create duplicate categories by
-                      typing.
-                    </p>
-                  </div>
 
                   <button
-                    className="icon-button"
-                    onClick={() => setCategoryManagerOpen(false)}
-                    aria-label="Close category manager"
+                    className="button outline"
+                    disabled={dbBusy}
+                    onClick={() => {
+                      setTaxonomySubject(
+                        manualQuestionDraft?.subject || subjects[0] || "",
+                      );
+                      setCategoryManagerOpen((open) => !open);
+                    }}
                   >
-                    <X size={17} />
+                    <Tags size={14} /> Manage subjects & topics
+                  </button>
+
+                  <button
+                    className="button ghost"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Reset all saved attempts, review marks, and notes?",
+                        )
+                      ) {
+                        setProgress({});
+                      }
+                    }}
+                    disabled={!bank.length}
+                  >
+                    <RotateCcw size={14} /> Reset progress
                   </button>
                 </div>
+              </div>
+              {manualPaperOpen && (
+                <div className="manual-builder">
+                  <div className="manual-builder-heading">
+                    <div>
+                      <h3>Create a new paper</h3>
+                      <p>
+                        Enter the paper details first. You will add its
+                        questions individually after creating it.
+                      </p>
+                    </div>
 
-                <div className="category-manager-grid">
-                  <div className="category-manager-card">
-                    <h4>Subjects</h4>
+                    <button
+                      className="icon-button"
+                      onClick={() => setManualPaperOpen(false)}
+                      aria-label="Close paper form"
+                    >
+                      <X size={17} />
+                    </button>
+                  </div>
 
+                  <div className="manual-form-grid">
                     <label>
-                      New subject name
+                      Paper ID <span className="required-mark">*</span>
                       <input
                         type="text"
-                        value={subjectNameDraft}
-                        onChange={(e) => setSubjectNameDraft(e.target.value)}
-                        placeholder="e.g. General Awareness"
+                        value={paperForm.id}
+                        onChange={(e) =>
+                          setPaperForm((p) => ({
+                            ...p,
+                            id: e.target.value,
+                          }))
+                        }
+                        placeholder="RRB-JE-2024-S1"
+                        maxLength={80}
+                      />
+                      <small>
+                        Use letters, numbers, hyphens, or underscores.
+                      </small>
+                    </label>
+
+                    <label>
+                      Exam date
+                      <input
+                        type="date"
+                        value={paperForm.date}
+                        onChange={(e) =>
+                          setPaperForm((p) => ({
+                            ...p,
+                            date: e.target.value,
+                          }))
+                        }
                       />
                     </label>
 
+                    <label>
+                      Shift
+                      <input
+                        type="text"
+                        value={paperForm.shift}
+                        onChange={(e) =>
+                          setPaperForm((p) => ({
+                            ...p,
+                            shift: e.target.value,
+                          }))
+                        }
+                        placeholder="Shift 1 / 09:00–10:30"
+                      />
+                    </label>
+
+                    <label>
+                      Source PDF filename
+                      <input
+                        type="text"
+                        value={paperForm.paperFile}
+                        onChange={(e) =>
+                          setPaperForm((p) => ({
+                            ...p,
+                            paperFile: e.target.value,
+                          }))
+                        }
+                        placeholder="rrb-je-2024-shift-1.pdf"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="button-row manual-action-row">
                     <button
                       className="button primary"
-                      onClick={handleAddSubject}
-                      disabled={dbBusy || !subjectNameDraft.trim()}
+                      onClick={handleCreateManualPaper}
+                      disabled={dbBusy}
                     >
-                      <Plus size={14} /> Add subject
+                      <Plus size={15} /> Create paper & add questions
+                    </button>
+
+                    <button
+                      className="button outline"
+                      onClick={() => setManualPaperOpen(false)}
+                      disabled={dbBusy}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {responseSheetOpen && (
+                <div className="manual-builder">
+                  <div className="manual-builder-heading">
+                    <div>
+                      <h3>Import TCS iON / Digialm response sheet</h3>
+                      <p>
+                        Import a saved HTML response sheet or fetch its page
+                        URL. Both inputs use the same TCS iON / Digialm parser.
+                      </p>
+                    </div>
+                    <button
+                      className="icon-button"
+                      onClick={() => {
+                        setResponseSheetOpen(false);
+                        setResponseSheetFile(null);
+                        setResponseSheetHtml("");
+                        setResponseSheetUrl("");
+                        setResponseSheetSourceLabel("");
+                        setResponseSheetPreview(null);
+                        setResponseSheetError("");
+                      }}
+                      aria-label="Close response-sheet importer"
+                    >
+                      <X size={17} />
                     </button>
                   </div>
 
-                  <div className="category-manager-card">
-                    <h4>Topics</h4>
-
+                  <div className="manual-form-grid">
                     <label>
-                      Select parent subject
+                      Paper ID <span className="required-mark">*</span>
+                      <input
+                        type="text"
+                        value={responseSheetPaperId}
+                        onChange={(e) =>
+                          setResponseSheetPaperId(
+                            e.target.value.replace(/\s+/g, "-"),
+                          )
+                        }
+                        placeholder="RRB-JE-2026-10-27-S1"
+                        maxLength={80}
+                      />
+                      <small>
+                        Unique ID used to identify this paper in PYPA.
+                      </small>
+                    </label>
+
+                    <label className="response-url-field">
+                      Response-sheet URL
+                      <input
+                        type="url"
+                        value={responseSheetUrl}
+                        onChange={(e) => setResponseSheetUrl(e.target.value)}
+                        placeholder="https://rrb.digialm.com/..."
+                        disabled={dbBusy}
+                      />
+                      <small>
+                        Paste the full response-sheet page URL. URL fetching
+                        requires the configured Worker endpoint.
+                      </small>
+                      <button
+                        type="button"
+                        className="button outline"
+                        onClick={handleFetchResponseSheetUrl}
+                        disabled={dbBusy || !responseSheetUrl.trim()}
+                      >
+                        <Download size={14} />{" "}
+                        {dbBusy ? "Fetching…" : "Fetch from URL"}
+                      </button>
+                    </label>
+                    <label>
+                      HTML response sheet{" "}
+                      <span className="required-mark">*</span>
+                      <input
+                        type="file"
+                        accept=".html,.htm,text/html"
+                        onChange={handleResponseSheetFileChange}
+                        disabled={dbBusy}
+                      />
+                      <small>
+                        Upload a saved .html or .htm file, or use the URL field
+                        above.
+                      </small>
+                    </label>
+                  </div>
+
+                  {responseSheetError && (
+                    <div className="alert" role="alert">
+                      <AlertTriangle size={16} />
+                      <span>{responseSheetError}</span>
+                    </div>
+                  )}
+
+                  {responseSheetPreview && (
+                    <div className="stats">
+                      <div>
+                        <small>Questions found</small>
+                        <b>{responseSheetPreview.metadata.totalQuestions}</b>
+                      </div>
+                      <div>
+                        <small>Embedded images</small>
+                        <b>{responseSheetPreview.imageEntries.length}</b>
+                      </div>
+                      <div>
+                        <small>Needs review</small>
+                        <b>{responseSheetPreview.questionIssues.length}</b>
+                      </div>
+                    </div>
+                  )}
+
+                  {responseSheetPreview?.metadata && (
+                    <p className="section-subtitle">
+                      <strong>
+                        {responseSheetPreview.metadata.examGroup ||
+                          "Exam group not detected"}
+                      </strong>
+                      {" · "}
+                      {responseSheetPreview.metadata.dateText ||
+                        "Date not detected"}
+                      {" · "}
+                      {responseSheetPreview.metadata.shift ||
+                        "Shift not detected"}
+                      {responseSheetSourceLabel && (
+                        <>
+                          {" "}
+                          Source:{" "}
+                          <span
+                            title={responseSheetSourceLabel}
+                            style={{
+                              display: "inline-block",
+                              maxWidth: "200px",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              verticalAlign: "bottom",
+                            }}
+                          >
+                            {responseSheetSourceLabel}
+                          </span>
+                        </>
+                      )}
+                      {responseSheetPreview.questionIssues.length > 0 && (
+                        <>
+                          {" · "}
+                          {responseSheetPreview.questionIssues.length}{" "}
+                          question(s) contain structural issues and will be
+                          flagged for review.
+                        </>
+                      )}
+                    </p>
+                  )}
+
+                  <div className="button-row manual-action-row">
+                    <button
+                      className="button primary"
+                      onClick={handleImportResponseSheet}
+                      disabled={
+                        dbBusy ||
+                        !responseSheetHtml ||
+                        !responseSheetPaperId.trim()
+                      }
+                    >
+                      <Upload size={15} />{" "}
+                      {dbBusy ? "Importing…" : "Import questions"}
+                    </button>
+                    <button
+                      className="button outline"
+                      onClick={() => {
+                        setResponseSheetOpen(false);
+                        setResponseSheetFile(null);
+                        setResponseSheetHtml("");
+                        setResponseSheetUrl("");
+                        setResponseSheetSourceLabel("");
+                        setResponseSheetPreview(null);
+                        setResponseSheetPaperId("");
+                        setResponseSheetError("");
+                      }}
+                      disabled={dbBusy}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="fineprint">
+                    The parser supports the common TCS iON / Digialm
+                    response-sheet layout. Embedded images are stored locally;
+                    linked Digialm images remain as full source URLs. Green
+                    official-answer markers are imported as source-key-verified.
+                    URL fetching uses a restricted server-side Worker because
+                    Digialm blocks direct browser requests with CORS.
+                  </p>
+                </div>
+              )}
+
+              {categoryManagerOpen && (
+                <div className="category-manager">
+                  <div className="manual-builder-heading">
+                    <div>
+                      <h3>Manage subjects & topics</h3>
+                      <p>
+                        Create categories here. Question entry uses dropdowns,
+                        so you cannot accidentally create duplicate categories
+                        by typing.
+                      </p>
+                    </div>
+
+                    <button
+                      className="icon-button"
+                      onClick={() => setCategoryManagerOpen(false)}
+                      aria-label="Close category manager"
+                    >
+                      <X size={17} />
+                    </button>
+                  </div>
+
+                  <div className="category-manager-grid">
+                    <div className="category-manager-card">
+                      <h4>Subjects</h4>
+
+                      <label>
+                        New subject name
+                        <input
+                          type="text"
+                          value={subjectNameDraft}
+                          onChange={(e) => setSubjectNameDraft(e.target.value)}
+                          placeholder="e.g. General Awareness"
+                        />
+                      </label>
+
+                      <button
+                        className="button primary"
+                        onClick={handleAddSubject}
+                        disabled={dbBusy || !subjectNameDraft.trim()}
+                      >
+                        <Plus size={14} /> Add subject
+                      </button>
+                    </div>
+
+                    <div className="category-manager-card">
+                      <h4>Topics</h4>
+
+                      <label>
+                        Select parent subject
+                        <select
+                          value={taxonomySubject}
+                          onChange={(e) => setTaxonomySubject(e.target.value)}
+                        >
+                          <option value="">Select subject</option>
+
+                          {subjects.map((value) => (
+                            <option key={value} value={value}>
+                              {value}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        New topic name
+                        <input
+                          type="text"
+                          value={topicNameDraft}
+                          onChange={(e) => setTopicNameDraft(e.target.value)}
+                          placeholder="e.g. Percentage"
+                        />
+                      </label>
+
+                      <button
+                        className="button primary"
+                        onClick={handleAddTopic}
+                        disabled={
+                          dbBusy || !taxonomySubject || !topicNameDraft.trim()
+                        }
+                      >
+                        <Plus size={14} /> Add topic to subject
+                      </button>
+
+                      {taxonomySubject && (
+                        <p className="category-parent-hint">
+                          This topic will belong to{" "}
+                          <strong>{taxonomySubject}</strong>.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {manualEntryOpen && manualQuestionDraft && (
+                <div
+                  className="manual-builder manual-question-builder"
+                  id="manual-question-builder"
+                >
+                  <div className="manual-builder-heading">
+                    <div>
+                      <h3>
+                        Add question · {manualEntryPaperId} · Q
+                        {manualQuestionDraft.questionNumber}
+                      </h3>
+
+                      <p>
+                        Question ID:{" "}
+                        <strong>
+                          {makeManualQuestionId(
+                            manualEntryPaperId,
+                            manualQuestionDraft.questionNumber,
+                          )}
+                        </strong>
+                        {" · "}
+                        Question numbers are generated automatically.
+                      </p>
+                    </div>
+
+                    <button
+                      className="icon-button"
+                      onClick={() => {
+                        setManualEntryOpen(false);
+                        setManualQuestionDraft(null);
+                      }}
+                      aria-label="Finish adding questions"
+                    >
+                      <X size={17} />
+                    </button>
+                  </div>
+
+                  {/* Subject and topic are dropdowns, not free-text inputs. */}
+                  <div className="manual-form-grid">
+                    <label>
+                      Subject <span className="required-mark">*</span>
                       <select
-                        value={taxonomySubject}
-                        onChange={(e) => setTaxonomySubject(e.target.value)}
+                        required
+                        value={manualQuestionDraft.subject}
+                        onChange={(e) =>
+                          setManualQuestionDraft((p) => ({
+                            ...p,
+                            subject: e.target.value,
+                            topic: "",
+                          }))
+                        }
                       >
                         <option value="">Select subject</option>
 
@@ -3280,821 +3384,931 @@ function App() {
                     </label>
 
                     <label>
-                      New topic name
-                      <input
-                        type="text"
-                        value={topicNameDraft}
-                        onChange={(e) => setTopicNameDraft(e.target.value)}
-                        placeholder="e.g. Percentage"
-                      />
+                      Topic
+                      <select
+                        value={manualQuestionDraft.topic}
+                        disabled={!manualQuestionDraft.subject}
+                        onChange={(e) =>
+                          setManualQuestionDraft((p) => ({
+                            ...p,
+                            topic: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">No topic / not classified</option>
+
+                        {manualTopicOptions.map((value) => (
+                          <option key={value} value={value}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
                     </label>
-
-                    <button
-                      className="button primary"
-                      onClick={handleAddTopic}
-                      disabled={
-                        dbBusy || !taxonomySubject || !topicNameDraft.trim()
-                      }
-                    >
-                      <Plus size={14} /> Add topic to subject
-                    </button>
-
-                    {taxonomySubject && (
-                      <p className="category-parent-hint">
-                        This topic will belong to{" "}
-                        <strong>{taxonomySubject}</strong>.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-            {manualEntryOpen && manualQuestionDraft && (
-              <div
-                className="manual-builder manual-question-builder"
-                id="manual-question-builder"
-              >
-                <div className="manual-builder-heading">
-                  <div>
-                    <h3>
-                      Add question · {manualEntryPaperId} · Q
-                      {manualQuestionDraft.questionNumber}
-                    </h3>
-
-                    <p>
-                      Question ID:{" "}
-                      <strong>
-                        {makeManualQuestionId(
-                          manualEntryPaperId,
-                          manualQuestionDraft.questionNumber,
-                        )}
-                      </strong>
-                      {" · "}
-                      Question numbers are generated automatically.
-                    </p>
                   </div>
 
                   <button
-                    className="icon-button"
+                    type="button"
+                    className="button outline manual-manage-categories"
                     onClick={() => {
-                      setManualEntryOpen(false);
-                      setManualQuestionDraft(null);
+                      setTaxonomySubject(
+                        manualQuestionDraft.subject || subjects[0] || "",
+                      );
+                      setCategoryManagerOpen((open) => !open);
                     }}
-                    aria-label="Finish adding questions"
                   >
-                    <X size={17} />
+                    <Tags size={14} /> Add or manage categories
                   </button>
-                </div>
 
-                {/* Subject and topic are dropdowns, not free-text inputs. */}
-                <div className="manual-form-grid">
-                  <label>
-                    Subject <span className="required-mark">*</span>
-                    <select
-                      required
-                      value={manualQuestionDraft.subject}
+                  <label className="manual-field">
+                    Question text <span className="required-mark">*</span>
+                    <textarea
+                      rows={4}
+                      value={manualQuestionDraft.question}
                       onChange={(e) =>
                         setManualQuestionDraft((p) => ({
                           ...p,
-                          subject: e.target.value,
-                          topic: "",
+                          question: e.target.value,
                         }))
                       }
-                    >
-                      <option value="">Select subject</option>
-
-                      {subjects.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    Topic
-                    <select
-                      value={manualQuestionDraft.topic}
-                      disabled={!manualQuestionDraft.subject}
-                      onChange={(e) =>
-                        setManualQuestionDraft((p) => ({
-                          ...p,
-                          topic: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">No topic / not classified</option>
-
-                      {manualTopicOptions.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <button
-                  type="button"
-                  className="button outline manual-manage-categories"
-                  onClick={() => {
-                    setTaxonomySubject(
-                      manualQuestionDraft.subject || subjects[0] || "",
-                    );
-                    setCategoryManagerOpen((open) => !open);
-                  }}
-                >
-                  <Tags size={14} /> Add or manage categories
-                </button>
-
-                <label className="manual-field">
-                  Question text <span className="required-mark">*</span>
-                  <textarea
-                    rows={4}
-                    value={manualQuestionDraft.question}
-                    onChange={(e) =>
-                      setManualQuestionDraft((p) => ({
-                        ...p,
-                        question: e.target.value,
-                      }))
-                    }
-                    placeholder="Enter the complete question..."
-                  />
-                </label>
-
-                {/* Optional question image. The file is stored in IndexedDB, not as a URL. */}
-                <div className="manual-image-field">
-                  <label>
-                    Question image{" "}
-                    <span className="edit-image-hint">(optional)</span>
-                    <input
-                      id="manual-question-image"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
-                      onChange={(e) =>
-                        setManualQuestionDraft((p) => ({
-                          ...p,
-                          questionImageFile: e.target.files?.[0] || null,
-                        }))
-                      }
+                      placeholder="Enter the complete question..."
                     />
                   </label>
 
-                  {manualQuestionDraft.questionImageFile && (
-                    <div className="manual-selected-image">
-                      {manualImagePreviewUrls.question && (
-                        <img
-                          className="manual-image-preview"
-                          src={manualImagePreviewUrls.question}
-                          alt="Question image preview"
-                        />
-                      )}
-
-                      <small>
-                        Selected: {manualQuestionDraft.questionImageFile.name}
-                      </small>
-
-                      <button
-                        type="button"
-                        className="button ghost"
-                        onClick={() => {
+                  {/* Optional question image. The file is stored in IndexedDB, not as a URL. */}
+                  <div className="manual-image-field">
+                    <label>
+                      Question image{" "}
+                      <span className="edit-image-hint">(optional)</span>
+                      <input
+                        id="manual-question-image"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
+                        onChange={(e) =>
                           setManualQuestionDraft((p) => ({
                             ...p,
-                            questionImageFile: null,
-                          }));
+                            questionImageFile: e.target.files?.[0] || null,
+                          }))
+                        }
+                      />
+                    </label>
 
-                          const input = document.getElementById(
-                            "manual-question-image",
-                          );
-
-                          if (input) input.value = "";
-                        }}
-                      >
-                        Remove image
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <h4 className="manual-subheading">
-                  Answer options <span className="required-mark">*</span>
-                </h4>
-
-                <div className="manual-options-grid">
-                  {manualQuestionDraft.options.map((option, index) => {
-                    const file = manualQuestionDraft.optionImageFiles[index];
-
-                    return (
-                      <div className="manual-option-card" key={index}>
-                        <label>
-                          Option {LABELS[index]}
-                          <input
-                            type="text"
-                            value={file ? "" : option}
-                            disabled={Boolean(file)}
-                            onChange={(e) =>
-                              setManualQuestionDraft((p) => ({
-                                ...p,
-                                options: p.options.map((value, i) =>
-                                  i === index ? e.target.value : value,
-                                ),
-                              }))
-                            }
-                            placeholder={
-                              file
-                                ? "Image selected"
-                                : `Enter option ${LABELS[index]}`
-                            }
+                    {manualQuestionDraft.questionImageFile && (
+                      <div className="manual-selected-image">
+                        {manualImagePreviewUrls.question && (
+                          <img
+                            className="manual-image-preview"
+                            src={manualImagePreviewUrls.question}
+                            alt="Question image preview"
                           />
-                        </label>
+                        )}
 
-                        <label>
-                          Or attach an option image
-                          <input
-                            id={`manual-option-image-${index}`}
-                            type="file"
-                            accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
-                            onChange={(e) => {
-                              const selectedFile = e.target.files?.[0] || null;
+                        <small>
+                          Selected: {manualQuestionDraft.questionImageFile.name}
+                        </small>
 
-                              setManualQuestionDraft((p) => ({
-                                ...p,
-                                optionImageFiles: {
-                                  ...p.optionImageFiles,
-                                  [index]: selectedFile,
-                                },
-                              }));
-                            }}
-                          />
-                        </label>
+                        <button
+                          type="button"
+                          className="button ghost"
+                          onClick={() => {
+                            setManualQuestionDraft((p) => ({
+                              ...p,
+                              questionImageFile: null,
+                            }));
 
-                        {file && (
-                          <div className="manual-selected-image">
-                            {manualImagePreviewUrls[`option-${index}`] && (
-                              <img
-                                className="manual-image-preview"
-                                src={manualImagePreviewUrls[`option-${index}`]}
-                                alt={`Option ${LABELS[index]} preview`}
-                              />
-                            )}
+                            const input = document.getElementById(
+                              "manual-question-image",
+                            );
 
-                            <small>Selected: {file.name}</small>
+                            if (input) input.value = "";
+                          }}
+                        >
+                          Remove image
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
-                            <button
-                              type="button"
-                              className="button ghost"
-                              onClick={() => {
+                  <h4 className="manual-subheading">
+                    Answer options <span className="required-mark">*</span>
+                  </h4>
+
+                  <div className="manual-options-grid">
+                    {manualQuestionDraft.options.map((option, index) => {
+                      const file = manualQuestionDraft.optionImageFiles[index];
+
+                      return (
+                        <div className="manual-option-card" key={index}>
+                          <label>
+                            Option {LABELS[index]}
+                            <input
+                              type="text"
+                              value={file ? "" : option}
+                              disabled={Boolean(file)}
+                              onChange={(e) =>
+                                setManualQuestionDraft((p) => ({
+                                  ...p,
+                                  options: p.options.map((value, i) =>
+                                    i === index ? e.target.value : value,
+                                  ),
+                                }))
+                              }
+                              placeholder={
+                                file
+                                  ? "Image selected"
+                                  : `Enter option ${LABELS[index]}`
+                              }
+                            />
+                          </label>
+
+                          <label>
+                            Or attach an option image
+                            <input
+                              id={`manual-option-image-${index}`}
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
+                              onChange={(e) => {
+                                const selectedFile =
+                                  e.target.files?.[0] || null;
+
                                 setManualQuestionDraft((p) => ({
                                   ...p,
                                   optionImageFiles: {
                                     ...p.optionImageFiles,
-                                    [index]: null,
+                                    [index]: selectedFile,
                                   },
                                 }));
-
-                                const input = document.getElementById(
-                                  `manual-option-image-${index}`,
-                                );
-
-                                if (input) input.value = "";
                               }}
-                            >
-                              Remove image / switch to text
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                            />
+                          </label>
 
-                <div className="manual-form-grid">
-                  <label>
-                    Correct answer <span className="required-mark">*</span>
-                    <select
-                      required
-                      value={manualQuestionDraft.correctAnswerIndex}
-                      onChange={(e) =>
-                        setManualQuestionDraft((p) => ({
-                          ...p,
-                          correctAnswerIndex: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select correct answer</option>
+                          {file && (
+                            <div className="manual-selected-image">
+                              {manualImagePreviewUrls[`option-${index}`] && (
+                                <img
+                                  className="manual-image-preview"
+                                  src={
+                                    manualImagePreviewUrls[`option-${index}`]
+                                  }
+                                  alt={`Option ${LABELS[index]} preview`}
+                                />
+                              )}
 
-                      {LABELS.map((label, index) => (
-                        <option key={label} value={index}>
-                          Option {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                              <small>Selected: {file.name}</small>
 
-                  <label>
-                    Memory trick / explanation
-                    <textarea
-                      rows={3}
-                      value={manualQuestionDraft.note}
-                      onChange={(e) =>
-                        setManualQuestionDraft((p) => ({
-                          ...p,
-                          note: e.target.value,
-                        }))
-                      }
-                      placeholder="Shortcut, mnemonic, explanation, or formula..."
-                    />
-                  </label>
-                </div>
+                              <button
+                                type="button"
+                                className="button ghost"
+                                onClick={() => {
+                                  setManualQuestionDraft((p) => ({
+                                    ...p,
+                                    optionImageFiles: {
+                                      ...p.optionImageFiles,
+                                      [index]: null,
+                                    },
+                                  }));
 
-                <label className="edit-verify-row manual-verify-row">
-                  <input
-                    type="checkbox"
-                    checked={manualQuestionDraft.verified}
-                    onChange={(e) =>
-                      setManualQuestionDraft((p) => ({
-                        ...p,
-                        verified: e.target.checked,
-                      }))
-                    }
-                  />
-                  I verified the question, all four options, the correct answer,
-                  and any required images.
-                </label>
+                                  const input = document.getElementById(
+                                    `manual-option-image-${index}`,
+                                  );
 
-                <div className="button-row manual-action-row">
-                  <button
-                    className="button primary"
-                    onClick={handleSaveManualQuestion}
-                    disabled={dbBusy}
-                  >
-                    <Save size={15} /> Save question & add next
-                  </button>
-
-                  <button
-                    className="button outline"
-                    disabled={dbBusy}
-                    onClick={() => {
-                      setManualEntryOpen(false);
-                      setManualQuestionDraft(null);
-                      setDbMessage(
-                        `Finished manual entry for ${manualEntryPaperId}. The paper and saved questions are retained.`,
-                      );
-                    }}
-                  >
-                    Finish paper entry
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {paperStats.length === 0 ? (
-              <div className="empty-list">
-                No papers yet. Import a JSON file or ZIP to populate this
-                section.
-              </div>
-            ) : (
-              <div className="paper-cards">
-                {paperStats.map((p) => (
-                  <div
-                    key={p.id}
-                    className={`paper-card ${coveragePaper === p.id ? "active" : ""}`}
-                  >
-                    <button
-                      className="paper-card-select"
-                      onClick={() => {
-                        setCoveragePaper(p.id);
-                        setCoverageSubject("All"); // Reset subject for the new paper.
-                        setCoverageTopic("All"); // Reset topic for the new paper.
-                        setCoverageOpen(true);
-                      }}
-                    >
-                      <span className="paper-card-title">{p.id}</span>
-                      <strong>
-                        {p.total ? `${p.covered}/${p.total}` : "0"}
-                      </strong>
-
-                      <small>
-                        {p.total
-                          ? `${p.covered} covered · ${p.ready} practice-ready`
-                          : "No questions added yet"}
-                      </small>
-
-                      {(p.date || p.shift) && (
-                        <small>
-                          {[p.date, p.shift].filter(Boolean).join(" · ")}
-                        </small>
-                      )}
-                      <span className="mini-progress">
-                        <span
-                          style={{
-                            width: `${p.total ? (p.covered / p.total) * 100 : 0}%`,
-                          }}
-                        />
-                      </span>
-                    </button>
-                    <div className="paper-card-actions">
-                      <button
-                        className="button outline"
-                        disabled={dbBusy}
-                        onClick={() => startManualQuestionEntry(p.id)}
-                      >
-                        <Plus size={13} /> Add questions
-                      </button>
-
-                      {p.responseAnalytics && (
-                        <button
-                          className="button outline"
-                          type="button"
-                          onClick={() =>
-                            setMarksPaperId((current) =>
-                              current === p.id ? null : p.id,
-                            )
-                          }
-                          aria-expanded={marksPaperId === p.id}
-                        >
-                          {marksPaperId === p.id ? "Hide marks" : "View marks"}
-                        </button>
-                      )}
-
-                      <button
-                        className="button delete-paper-button"
-                        disabled={dbBusy}
-                        onClick={() => handleDeletePaper(p.id)}
-                      >
-                        Delete paper
-                      </button>
-                    </div>
-                    {marksPaperId === p.id && p.responseAnalytics && (
-                      <div className="paper-marks-panel">
-                        <strong>Original response-sheet result</strong>
-                           {p.responseAnalytics.scoreAvailable ? (
-                          <p className="paper-marks-score">
-                            <b>
-                              {p.responseAnalytics.scoreComplete
-                                ? "Calculated marks"
-                                : "Partial calculated marks"}
-                              :
-                            </b>{" "}
-                            {Number(p.responseAnalytics.marksAwarded).toFixed(
-                              2,
-                            )}
-                            {Number.isFinite(
-                              p.responseAnalytics.maximumMarks,
-                            ) &&
-                              ` / ${Number(p.responseAnalytics.maximumMarks).toFixed(2)}`}
-                          </p>
-                        ) : (
-                          <p className="paper-marks-warning">
-                            Marking scheme was not detected. Correct/wrong
-                            counts are available, but marks cannot be calculated
-                            reliably.
-                          </p>
-                        )}
-                        <div className="paper-marks-grid">
-                          <span>
-                            <b>Attempted</b>
-                            {p.responseAnalytics.attempted}
-                          </span>
-                          <span>
-                            <b>Correct</b>
-                            {p.responseAnalytics.correct}
-                          </span>
-                          <span>
-                            <b>Wrong</b>
-                            {p.responseAnalytics.wrong}
-                          </span>
-                          <span>
-                            <b>Unattempted</b>
-                            {p.responseAnalytics.unattempted}
-                          </span>
-                          {p.responseAnalytics.notEvaluable > 0 && (
-                            <span>
-                              <b>Not evaluable</b>
-                              {p.responseAnalytics.notEvaluable}
-                            </span>
+                                  if (input) input.value = "";
+                                }}
+                              >
+                                Remove image / switch to text
+                              </button>
+                            </div>
                           )}
                         </div>
-                        <div className="paper-marks-scheme">
-                          <span>Correct: +{p.positiveMarks ?? "N/A"}</span>
-                          <span>
-                            Incorrect:{" "}
-                            {p.negativeMarks === null
-                              ? "N/A"
-                              : `-${p.negativeMarks}`}
-                          </span>
-                        </div>
-                     
-                        {p.responseAnalytics.notEvaluable > 0 && (
-                          <p className="paper-marks-warning">
-                            {p.responseAnalytics.notEvaluable} attempted
-                            response(s) had no identifiable official answer. The
-                            displayed score excludes these responses and is
-                            incomplete.
-                          </p>
-                        )}
-                        <small>
-                          Based on the candidate's original responses in the
-                          imported HTML, not later PYPA practice attempts.
-                        </small>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            )}
-            {coveragePaper && (
-              <>
-                <div className="coverage-browser-head">
-                  <h3>{coveragePaper} · Questions</h3>
 
-                  <div className="coverage-browser-actions">
+                  <div className="manual-form-grid">
+                    <label>
+                      Correct answer <span className="required-mark">*</span>
+                      <select
+                        required
+                        value={manualQuestionDraft.correctAnswerIndex}
+                        onChange={(e) =>
+                          setManualQuestionDraft((p) => ({
+                            ...p,
+                            correctAnswerIndex: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Select correct answer</option>
+
+                        {LABELS.map((label, index) => (
+                          <option key={label} value={index}>
+                            Option {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      Memory trick / explanation
+                      <textarea
+                        rows={3}
+                        value={manualQuestionDraft.note}
+                        onChange={(e) =>
+                          setManualQuestionDraft((p) => ({
+                            ...p,
+                            note: e.target.value,
+                          }))
+                        }
+                        placeholder="Shortcut, mnemonic, explanation, or formula..."
+                      />
+                    </label>
+                  </div>
+
+                  <label className="edit-verify-row manual-verify-row">
+                    <input
+                      type="checkbox"
+                      checked={manualQuestionDraft.verified}
+                      onChange={(e) =>
+                        setManualQuestionDraft((p) => ({
+                          ...p,
+                          verified: e.target.checked,
+                        }))
+                      }
+                    />
+                    I verified the question, all four options, the correct
+                    answer, and any required images.
+                  </label>
+
+                  <div className="button-row manual-action-row">
                     <button
                       className="button primary"
+                      onClick={handleSaveManualQuestion}
                       disabled={dbBusy}
-                      onClick={() => startManualQuestionEntry(coveragePaper)}
                     >
-                      <Plus size={14} /> Add question
+                      <Save size={15} /> Save question & add next
                     </button>
 
                     <button
-                      className="button ghost"
-                      onClick={() => setCoverageOpen((v) => !v)}
+                      className="button outline"
+                      disabled={dbBusy}
+                      onClick={() => {
+                        setManualEntryOpen(false);
+                        setManualQuestionDraft(null);
+                        setDbMessage(
+                          `Finished manual entry for ${manualEntryPaperId}. The paper and saved questions are retained.`,
+                        );
+                      }}
                     >
-                      {coverageOpen ? "Hide list" : "Show list"}{" "}
-                      <Eye size={14} />
+                      Finish paper entry
                     </button>
                   </div>
                 </div>
-                {coverageOpen && (
-                  <>
-                    <div className="coverage-filters">
-                      <label className="search-box">
-                        <Search size={15} />
-                        <input
-                          value={coverageSearch}
-                          onChange={(e) => setCoverageSearch(e.target.value)}
-                          placeholder="Search question, topic, ID…"
-                        />
-                      </label>
-                      <select
-                        value={coverageStatus}
-                        onChange={(e) => setCoverageStatus(e.target.value)}
-                        aria-label="Filter question status"
-                      >
-                        {[
-                          "All",
-                          "Covered",
-                          "Uncovered",
-                          "Has errors",
-                          "Review",
-                          "Needs review",
-                        ].map((s) => (
-                          <option key={s}>{s}</option>
-                        ))}
-                      </select>
-                      {/* New: filter questions by subject within the selected paper. */}
-                      <select
-                        value={coverageSubject}
-                        onChange={(e) => {
-                          setCoverageSubject(e.target.value);
+              )}
 
-                          // Reset topic because it may not belong to the newly selected subject.
-                          setCoverageTopic("All");
+              {paperStats.length === 0 ? (
+                <div className="empty-list">
+                  No papers yet. Import a JSON file or ZIP to populate this
+                  section.
+                </div>
+              ) : (
+                <div className="paper-cards">
+                  {paperStats.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`paper-card ${coveragePaper === p.id ? "active" : ""}`}
+                    >
+                      <button
+                        className="paper-card-select"
+                        onClick={() => {
+                          setCoveragePaper(p.id);
+                          setCoverageSubject("All"); // Reset subject for the new paper.
+                          setCoverageTopic("All"); // Reset topic for the new paper.
+                          setCoverageOpen(true);
                         }}
-                        aria-label="Filter questions by subject"
                       >
-                        <option value="All">All subjects</option>
-                        {coverageSubjects.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
+                        <span className="paper-card-title">{p.id}</span>
+                        <strong>
+                          {p.total ? `${p.covered}/${p.total}` : "0"}
+                        </strong>
 
-                      {/* New: available topics depend on the selected subject. */}
-                      <select
-                        value={coverageTopic}
-                        onChange={(e) => setCoverageTopic(e.target.value)}
-                        aria-label="Filter questions by topic"
-                      >
-                        <option value="All">All topics</option>
-                        {coverageTopics.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
+                        <small>
+                          {p.total
+                            ? `${p.covered} covered · ${p.ready} practice-ready`
+                            : "No questions added yet"}
+                        </small>
+
+                        {(p.date || p.shift) && (
+                          <small>
+                            {[p.date, p.shift].filter(Boolean).join(" · ")}
+                          </small>
+                        )}
+                        <span className="mini-progress">
+                          <span
+                            style={{
+                              width: `${p.total ? (p.covered / p.total) * 100 : 0}%`,
+                            }}
+                          />
+                        </span>
+                      </button>
+                      <div className="paper-card-actions">
+                        <button
+                          className="button outline"
+                          disabled={dbBusy}
+                          onClick={() => startManualQuestionEntry(p.id)}
+                        >
+                          <Plus size={13} /> Add questions
+                        </button>
+
+                        {p.responseAnalytics && (
+                          <button
+                            className="button outline"
+                            type="button"
+                            onClick={() =>
+                              setMarksPaperId((current) =>
+                                current === p.id ? null : p.id,
+                              )
+                            }
+                            aria-expanded={marksPaperId === p.id}
+                          >
+                            {marksPaperId === p.id
+                              ? "Hide marks"
+                              : "View marks"}
+                          </button>
+                        )}
+
+                        <button
+                          className="button delete-paper-button"
+                          disabled={dbBusy}
+                          onClick={() => handleDeletePaper(p.id)}
+                        >
+                          Delete paper
+                        </button>
+                      </div>
+                      {marksPaperId === p.id && p.responseAnalytics && (
+                        <div className="paper-marks-panel">
+                          <strong>Original response-sheet result</strong>
+                          {p.responseAnalytics.scoreAvailable ? (
+                            <p className="paper-marks-score">
+                              <b>
+                                {p.responseAnalytics.scoreComplete
+                                  ? "Calculated marks"
+                                  : "Partial calculated marks"}
+                                :
+                              </b>{" "}
+                              {Number(p.responseAnalytics.marksAwarded).toFixed(
+                                2,
+                              )}
+                              {Number.isFinite(
+                                p.responseAnalytics.maximumMarks,
+                              ) &&
+                                ` / ${Number(p.responseAnalytics.maximumMarks).toFixed(2)}`}
+                            </p>
+                          ) : (
+                            <p className="paper-marks-warning">
+                              Marking scheme was not detected. Correct/wrong
+                              counts are available, but marks cannot be
+                              calculated reliably.
+                            </p>
+                          )}
+                          <div className="paper-marks-grid">
+                            <span>
+                              <b>Attempted</b>
+                              {p.responseAnalytics.attempted}
+                            </span>
+                            <span>
+                              <b>Correct</b>
+                              {p.responseAnalytics.correct}
+                            </span>
+                            <span>
+                              <b>Wrong</b>
+                              {p.responseAnalytics.wrong}
+                            </span>
+                            <span>
+                              <b>Unattempted</b>
+                              {p.responseAnalytics.unattempted}
+                            </span>
+                            {p.responseAnalytics.notEvaluable > 0 && (
+                              <span>
+                                <b>Not evaluable</b>
+                                {p.responseAnalytics.notEvaluable}
+                              </span>
+                            )}
+                          </div>
+                          <div className="paper-marks-scheme">
+                            <span>Correct: +{p.positiveMarks ?? "N/A"}</span>
+                            <span>
+                              Incorrect:{" "}
+                              {p.negativeMarks === null
+                                ? "N/A"
+                                : `-${p.negativeMarks}`}
+                            </span>
+                          </div>
+
+                          {p.responseAnalytics.notEvaluable > 0 && (
+                            <p className="paper-marks-warning">
+                              {p.responseAnalytics.notEvaluable} attempted
+                              response(s) had no identifiable official answer.
+                              The displayed score excludes these responses and
+                              is incomplete.
+                            </p>
+                          )}
+                          <small>
+                            Based on the candidate's original responses in the
+                            imported HTML, not later PYPA practice attempts.
+                          </small>
+                        </div>
+                      )}
                     </div>
-                    <p className="coverage-count">
-                      Showing {coverageQuestions.length} of{" "}
-                      {bank.filter((q) => q.paperId === coveragePaper).length}{" "}
-                      questions
-                    </p>
-                    <div className="coverage-question-list">
-                      {coverageQuestions.map((q) => {
-                        const state = getState(progress, q);
-                        const ready = isPracticeReady(q);
-                        const editing = editingQuestionId === q.id;
-                        return (
-                          <div className="coverage-question" key={q.id}>
-                            {editing && editDraft ? (
-                              // 1. EDIT MODE
-                              <div className="question-edit-form">
-                                <label>
-                                  Question {q.questionNumber} Text
-                                  <textarea
-                                    rows={4}
-                                    value={editDraft.question}
-                                    onChange={(e) =>
-                                      setEditDraft((p) => ({
-                                        ...p,
-                                        question: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                </label>
+                  ))}
+                </div>
+              )}
+              {coveragePaper && (
+                <>
+                  <div className="coverage-browser-head">
+                    <h3>{coveragePaper} · Questions</h3>
 
-                                <label>
-                                  Question HTML (advanced formatting)
-                                  <textarea
-                                    rows={7}
-                                    spellCheck={false}
-                                    value={editDraft.questionHtml}
-                                    placeholder="Example: <p>Question with <strong>bold</strong> text</p>"
-                                    onChange={(e) =>
-                                      setEditDraft((previous) => ({
-                                        ...previous,
-                                        questionHtml: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                  <small>
-                                    Supports basic HTML formatting. Scripts,
-                                    styles, embedded images and unsafe elements
-                                    are removed when saved. Manage question
-                                    images using the image controls below.
-                                  </small>
-                                </label>
+                    <div className="coverage-browser-actions">
+                      <button
+                        className="button primary"
+                        disabled={dbBusy}
+                        onClick={() => startManualQuestionEntry(coveragePaper)}
+                      >
+                        <Plus size={14} /> Add question
+                      </button>
 
-                                <label>
-                                  Subject
-                                  <select
-                                    value={editDraft.subject}
-                                    onChange={(e) =>
-                                      setEditDraft((previous) => ({
-                                        ...previous,
-                                        subject: e.target.value,
-                                        topic: "",
-                                      }))
-                                    }
-                                  >
-                                    <option value="">Select subject</option>
-                                    {subjects.map((value) => (
-                                      <option key={value} value={value}>
-                                        {value}
-                                      </option>
-                                    ))}
-                                    {/* <option value="__new__">
+                      <button
+                        className="button ghost"
+                        onClick={() => setCoverageOpen((v) => !v)}
+                      >
+                        {coverageOpen ? "Hide list" : "Show list"}{" "}
+                        <Eye size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {coverageOpen && (
+                    <>
+                      <div className="coverage-filters">
+                        <label className="search-box">
+                          <Search size={15} />
+                          <input
+                            value={coverageSearch}
+                            onChange={(e) => setCoverageSearch(e.target.value)}
+                            placeholder="Search question, topic, ID…"
+                          />
+                        </label>
+                        <select
+                          value={coverageStatus}
+                          onChange={(e) => setCoverageStatus(e.target.value)}
+                          aria-label="Filter question status"
+                        >
+                          {[
+                            "All",
+                            "Covered",
+                            "Uncovered",
+                            "Has errors",
+                            "Review",
+                            "Needs review",
+                          ].map((s) => (
+                            <option key={s}>{s}</option>
+                          ))}
+                        </select>
+                        {/* New: filter questions by subject within the selected paper. */}
+                        <select
+                          value={coverageSubject}
+                          onChange={(e) => {
+                            setCoverageSubject(e.target.value);
+
+                            // Reset topic because it may not belong to the newly selected subject.
+                            setCoverageTopic("All");
+                          }}
+                          aria-label="Filter questions by subject"
+                        >
+                          <option value="All">All subjects</option>
+                          {coverageSubjects.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* New: available topics depend on the selected subject. */}
+                        <select
+                          value={coverageTopic}
+                          onChange={(e) => setCoverageTopic(e.target.value)}
+                          aria-label="Filter questions by topic"
+                        >
+                          <option value="All">All topics</option>
+                          {coverageTopics.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="coverage-count">
+                        Showing {coverageQuestions.length} of{" "}
+                        {bank.filter((q) => q.paperId === coveragePaper).length}{" "}
+                        questions
+                      </p>
+                      <div className="coverage-question-list">
+                        {coverageQuestions.map((q) => {
+                          const state = getState(progress, q);
+                          const ready = isPracticeReady(q);
+                          const editing = editingQuestionId === q.id;
+                          return (
+                            <div className="coverage-question" key={q.id}>
+                              {editing && editDraft ? (
+                                // 1. EDIT MODE
+                                <div className="question-edit-form">
+                                  <label>
+                                    Question {q.questionNumber} Text
+                                    <textarea
+                                      rows={4}
+                                      value={editDraft.question}
+                                      onChange={(e) =>
+                                        setEditDraft((p) => ({
+                                          ...p,
+                                          question: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </label>
+
+                                  <label>
+                                    Question HTML (advanced formatting)
+                                    <textarea
+                                      rows={7}
+                                      spellCheck={false}
+                                      value={editDraft.questionHtml}
+                                      placeholder="Example: <p>Question with <strong>bold</strong> text</p>"
+                                      onChange={(e) =>
+                                        setEditDraft((previous) => ({
+                                          ...previous,
+                                          questionHtml: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <small>
+                                      Supports basic HTML formatting. Scripts,
+                                      styles, embedded images and unsafe
+                                      elements are removed when saved. Manage
+                                      question images using the image controls
+                                      below.
+                                    </small>
+                                  </label>
+
+                                  <label>
+                                    Subject
+                                    <select
+                                      value={editDraft.subject}
+                                      onChange={(e) =>
+                                        setEditDraft((previous) => ({
+                                          ...previous,
+                                          subject: e.target.value,
+                                          topic: "",
+                                        }))
+                                      }
+                                    >
+                                      <option value="">Select subject</option>
+                                      {subjects.map((value) => (
+                                        <option key={value} value={value}>
+                                          {value}
+                                        </option>
+                                      ))}
+                                      {/* <option value="__new__">
                                       + Create new subject…
                                     </option> */}
-                                  </select>
-                                </label>
+                                    </select>
+                                  </label>
 
-                                <label>
-                                  Topic / tag
-                                  <select
-                                    value={editDraft.topic}
-                                    onChange={(e) => {
-                                      const value = e.target.value;
+                                  <label>
+                                    Topic / tag
+                                    <select
+                                      value={editDraft.topic}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
 
-                                      if (value === "__new__") {
-                                        const newTopic = window.prompt(
-                                          "Enter a new topic name:",
-                                        );
-                                        if (!newTopic?.trim()) return;
+                                        if (value === "__new__") {
+                                          const newTopic = window.prompt(
+                                            "Enter a new topic name:",
+                                          );
+                                          if (!newTopic?.trim()) return;
 
-                                        const normalized = newTopic.trim();
-                                        const existing = availableTopics.find(
-                                          (t) =>
-                                            t.toLowerCase() ===
-                                            normalized.toLowerCase(),
-                                        );
+                                          const normalized = newTopic.trim();
+                                          const existing = availableTopics.find(
+                                            (t) =>
+                                              t.toLowerCase() ===
+                                              normalized.toLowerCase(),
+                                          );
+
+                                          setEditDraft((previous) => ({
+                                            ...previous,
+                                            topic: existing || normalized,
+                                          }));
+                                          return;
+                                        }
 
                                         setEditDraft((previous) => ({
                                           ...previous,
-                                          topic: existing || normalized,
+                                          topic: value,
                                         }));
-                                        return;
-                                      }
+                                      }}
+                                    >
+                                      <option value="">Select topic</option>
 
-                                      setEditDraft((previous) => ({
-                                        ...previous,
-                                        topic: value,
-                                      }));
-                                    }}
-                                  >
-                                    <option value="">Select topic</option>
+                                      {editTopics.map((value) => (
+                                        <option key={value} value={value}>
+                                          {value}
+                                        </option>
+                                      ))}
 
-                                    {editTopics.map((value) => (
-                                      <option key={value} value={value}>
-                                        {value}
-                                      </option>
-                                    ))}
-
-                                    {/* <option value="__new__">
+                                      {/* <option value="__new__">
                                       + Create new topic…
                                     </option> */}
-                                  </select>
-                                </label>
-                                {/* Question image: add, replace, remove, or mark as not required */}
-                                {(() => {
-                                  const currentPath = q.questionImage
-                                    ? normalizePath(q.questionImage)
-                                    : "";
-                                  const currentSrc = currentPath
-                                    ? imageUrls[`${q.paperId}::${currentPath}`]
-                                    : null;
-                                  const previewSrc =
-                                    editImagePreviewUrls.question || currentSrc;
-                                  const imageRemoved =
-                                    editDraft.questionImageRemoved ||
-                                    editDraft.questionImageNotRequired;
+                                    </select>
+                                  </label>
+                                  {/* Question image: add, replace, remove, or mark as not required */}
+                                  {(() => {
+                                    const currentPath = q.questionImage
+                                      ? normalizePath(q.questionImage)
+                                      : "";
+                                    const currentSrc = currentPath
+                                      ? imageUrls[
+                                          `${q.paperId}::${currentPath}`
+                                        ]
+                                      : null;
+                                    const previewSrc =
+                                      editImagePreviewUrls.question ||
+                                      currentSrc;
+                                    const imageRemoved =
+                                      editDraft.questionImageRemoved ||
+                                      editDraft.questionImageNotRequired;
 
-                                  return (
-                                    <div className="edit-image-section">
-                                      <h4>
-                                        Question image{" "}
-                                        <span className="edit-image-hint">
-                                          (optional when not needed)
-                                        </span>
-                                      </h4>
-                                      {previewSrc && !imageRemoved && (
-                                        <img
-                                          className="edit-image-preview"
-                                          src={previewSrc}
-                                          alt={`Question ${q.questionNumber} image preview`}
-                                        />
-                                      )}
-                                      {currentPath &&
-                                        !currentSrc &&
-                                        !editDraft.questionImageFile &&
-                                        !imageRemoved && (
-                                          <p
-                                            className="edit-image-warning"
-                                            role="status"
-                                          >
-                                            Stored image is missing. Upload a
-                                            replacement or remove the reference.
-                                          </p>
+                                    return (
+                                      <div className="edit-image-section">
+                                        <h4>
+                                          Question image{" "}
+                                          <span className="edit-image-hint">
+                                            (optional when not needed)
+                                          </span>
+                                        </h4>
+                                        {previewSrc && !imageRemoved && (
+                                          <img
+                                            className="edit-image-preview"
+                                            src={previewSrc}
+                                            alt={`Question ${q.questionNumber} image preview`}
+                                          />
                                         )}
-                                      <label>
-                                        Image path / filename
-                                        <input
-                                          value={editDraft.questionImagePath}
-                                          disabled={imageRemoved}
-                                          onChange={(e) =>
-                                            setEditDraft((p) => ({
-                                              ...p,
-                                              questionImagePath: e.target.value,
-                                              questionImageRemoved: false,
-                                            }))
-                                          }
-                                          placeholder={`images/q${q.questionNumber}-question.png`}
-                                        />
-                                      </label>
-                                      <label>
-                                        {currentPath && !imageRemoved
-                                          ? "Add / replace question image"
-                                          : "Add question image (optional)"}
-                                        <input
-                                          type="file"
-                                          accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
-                                          onChange={(e) => {
-                                            const file =
-                                              e.target.files?.[0] || null;
-                                            setEditDraft((p) => ({
-                                              ...p,
-                                              questionImageFile: file,
-                                              questionImageRemoved: false,
-                                              questionImageNotRequired: file
-                                                ? false
-                                                : p.questionImageNotRequired,
-                                            }));
-                                            e.target.value = "";
-                                          }}
-                                        />
-                                      </label>
-                                      {editDraft.questionImageFile && (
-                                        <small>
-                                          Selected:{" "}
-                                          {editDraft.questionImageFile.name}
-                                        </small>
-                                      )}
-                                      <div className="button-row edit-image-actions">
-                                        {(currentPath ||
-                                          editDraft.questionImageFile) &&
+                                        {currentPath &&
+                                          !currentSrc &&
+                                          !editDraft.questionImageFile &&
                                           !imageRemoved && (
+                                            <p
+                                              className="edit-image-warning"
+                                              role="status"
+                                            >
+                                              Stored image is missing. Upload a
+                                              replacement or remove the
+                                              reference.
+                                            </p>
+                                          )}
+                                        <label>
+                                          Image path / filename
+                                          <input
+                                            value={editDraft.questionImagePath}
+                                            disabled={imageRemoved}
+                                            onChange={(e) =>
+                                              setEditDraft((p) => ({
+                                                ...p,
+                                                questionImagePath:
+                                                  e.target.value,
+                                                questionImageRemoved: false,
+                                              }))
+                                            }
+                                            placeholder={`images/q${q.questionNumber}-question.png`}
+                                          />
+                                        </label>
+                                        <label>
+                                          {currentPath && !imageRemoved
+                                            ? "Add / replace question image"
+                                            : "Add question image (optional)"}
+                                          <input
+                                            type="file"
+                                            accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
+                                            onChange={(e) => {
+                                              const file =
+                                                e.target.files?.[0] || null;
+                                              setEditDraft((p) => ({
+                                                ...p,
+                                                questionImageFile: file,
+                                                questionImageRemoved: false,
+                                                questionImageNotRequired: file
+                                                  ? false
+                                                  : p.questionImageNotRequired,
+                                              }));
+                                              e.target.value = "";
+                                            }}
+                                          />
+                                        </label>
+                                        {editDraft.questionImageFile && (
+                                          <small>
+                                            Selected:{" "}
+                                            {editDraft.questionImageFile.name}
+                                          </small>
+                                        )}
+                                        <div className="button-row edit-image-actions">
+                                          {(currentPath ||
+                                            editDraft.questionImageFile) &&
+                                            !imageRemoved && (
+                                              <button
+                                                type="button"
+                                                className="button outline"
+                                                disabled={dbBusy}
+                                                onClick={() =>
+                                                  setEditDraft((p) => ({
+                                                    ...p,
+                                                    questionImagePath: "",
+                                                    questionImageFile: null,
+                                                    questionImageRemoved: true,
+                                                  }))
+                                                }
+                                              >
+                                                Remove image
+                                              </button>
+                                            )}
+                                          <label className="edit-image-optional">
+                                            <input
+                                              type="checkbox"
+                                              checked={Boolean(
+                                                editDraft.questionImageNotRequired,
+                                              )}
+                                              onChange={(e) =>
+                                                setEditDraft((p) => ({
+                                                  ...p,
+                                                  questionImageNotRequired:
+                                                    e.target.checked,
+                                                  questionImageRemoved:
+                                                    e.target.checked,
+                                                  questionImagePath: e.target
+                                                    .checked
+                                                    ? p.questionImagePath
+                                                    : p.questionImagePath ||
+                                                      q.questionImage ||
+                                                      `images/q${q.questionNumber}-question.png`,
+                                                  questionImageFile: e.target
+                                                    .checked
+                                                    ? null
+                                                    : p.questionImageFile,
+                                                }))
+                                              }
+                                            />
+                                            This question does not require an
+                                            image
+                                          </label>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* Every option can remain text or be changed to an image, and vice versa. */}
+                                  <div className="question-edit-options">
+                                    {editDraft.options.map((option, i) => {
+                                      const imageOption = isImagePath(option);
+                                      const path = imageOption
+                                        ? normalizePath(option)
+                                        : "";
+                                      const src = path
+                                        ? imageUrls[`${q.paperId}::${path}`]
+                                        : null;
+                                      const selectedPreview =
+                                        editImagePreviewUrls[`option-${i}`];
+                                      const previewSrc = selectedPreview || src;
+                                      const defaultPath = `images/q${q.questionNumber}-option-${LABELS[i].toLowerCase()}.png`;
+
+                                      return (
+                                        <div
+                                          className="edit-option-field"
+                                          key={i}
+                                        >
+                                          <h4>Option {LABELS[i]}</h4>
+                                          {!imageOption ? (
+                                            <>
+                                              <label>
+                                                Option text
+                                                <input
+                                                  value={option}
+                                                  onChange={(e) =>
+                                                    setEditDraft((p) => ({
+                                                      ...p,
+                                                      options: p.options.map(
+                                                        (v, j) =>
+                                                          j === i
+                                                            ? e.target.value
+                                                            : v,
+                                                      ),
+                                                    }))
+                                                  }
+                                                  placeholder={`Enter option ${LABELS[i]} text`}
+                                                />
+                                              </label>
+                                              <label>
+                                                Replace text with an image
+                                                (optional)
+                                                <input
+                                                  type="file"
+                                                  accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
+                                                  onChange={(e) => {
+                                                    const file =
+                                                      e.target.files?.[0] ||
+                                                      null;
+                                                    setEditDraft((p) => ({
+                                                      ...p,
+                                                      options: p.options.map(
+                                                        (v, j) =>
+                                                          j === i
+                                                            ? file
+                                                              ? isImagePath(v)
+                                                                ? normalizePath(
+                                                                    v,
+                                                                  )
+                                                                : defaultPath
+                                                              : v
+                                                            : v,
+                                                      ),
+                                                      optionImageFiles: {
+                                                        ...p.optionImageFiles,
+                                                        [i]: file,
+                                                      },
+                                                    }));
+                                                    e.target.value = "";
+                                                  }}
+                                                />
+                                              </label>
+                                            </>
+                                          ) : (
+                                            <>
+                                              {previewSrc ? (
+                                                <img
+                                                  className="edit-image-preview option-image-preview"
+                                                  src={previewSrc}
+                                                  alt={`Option ${LABELS[i]} image preview`}
+                                                />
+                                              ) : (
+                                                <p
+                                                  className="edit-image-warning"
+                                                  role="status"
+                                                >
+                                                  Missing image: {path}
+                                                </p>
+                                              )}
+                                              <label>
+                                                Image path / filename
+                                                <input
+                                                  value={option}
+                                                  onChange={(e) =>
+                                                    setEditDraft((p) => ({
+                                                      ...p,
+                                                      options: p.options.map(
+                                                        (v, j) =>
+                                                          j === i
+                                                            ? e.target.value
+                                                            : v,
+                                                      ),
+                                                    }))
+                                                  }
+                                                  placeholder={defaultPath}
+                                                />
+                                              </label>
+                                              <label>
+                                                Replace image
+                                                <input
+                                                  type="file"
+                                                  accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
+                                                  onChange={(e) => {
+                                                    const file =
+                                                      e.target.files?.[0] ||
+                                                      null;
+                                                    setEditDraft((p) => ({
+                                                      ...p,
+                                                      optionImageFiles: {
+                                                        ...p.optionImageFiles,
+                                                        [i]: file,
+                                                      },
+                                                    }));
+                                                    e.target.value = "";
+                                                  }}
+                                                />
+                                              </label>
+                                            </>
+                                          )}
+                                          {editDraft.optionImageFiles[i] && (
+                                            <small>
+                                              Selected:{" "}
+                                              {
+                                                editDraft.optionImageFiles[i]
+                                                  .name
+                                              }
+                                            </small>
+                                          )}
+                                          {imageOption && (
                                             <button
                                               type="button"
                                               className="button outline"
@@ -4102,400 +4316,221 @@ function App() {
                                               onClick={() =>
                                                 setEditDraft((p) => ({
                                                   ...p,
-                                                  questionImagePath: "",
-                                                  questionImageFile: null,
-                                                  questionImageRemoved: true,
+                                                  options: p.options.map(
+                                                    (v, j) =>
+                                                      j === i ? "" : v,
+                                                  ),
+                                                  optionImageFiles: {
+                                                    ...p.optionImageFiles,
+                                                    [i]: null,
+                                                  },
                                                 }))
                                               }
                                             >
-                                              Remove image
+                                              Remove image / switch to text
                                             </button>
-                                          )}
-                                        <label className="edit-image-optional">
-                                          <input
-                                            type="checkbox"
-                                            checked={Boolean(
-                                              editDraft.questionImageNotRequired,
-                                            )}
-                                            onChange={(e) =>
-                                              setEditDraft((p) => ({
-                                                ...p,
-                                                questionImageNotRequired:
-                                                  e.target.checked,
-                                                questionImageRemoved:
-                                                  e.target.checked,
-                                                questionImagePath: e.target
-                                                  .checked
-                                                  ? p.questionImagePath
-                                                  : p.questionImagePath ||
-                                                    q.questionImage ||
-                                                    `images/q${q.questionNumber}-question.png`,
-                                                questionImageFile: e.target
-                                                  .checked
-                                                  ? null
-                                                  : p.questionImageFile,
-                                              }))
-                                            }
-                                          />
-                                          This question does not require an
-                                          image
-                                        </label>
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
-
-                                {/* Every option can remain text or be changed to an image, and vice versa. */}
-                                <div className="question-edit-options">
-                                  {editDraft.options.map((option, i) => {
-                                    const imageOption = isImagePath(option);
-                                    const path = imageOption
-                                      ? normalizePath(option)
-                                      : "";
-                                    const src = path
-                                      ? imageUrls[`${q.paperId}::${path}`]
-                                      : null;
-                                    const selectedPreview =
-                                      editImagePreviewUrls[`option-${i}`];
-                                    const previewSrc = selectedPreview || src;
-                                    const defaultPath = `images/q${q.questionNumber}-option-${LABELS[i].toLowerCase()}.png`;
-
-                                    return (
-                                      <div
-                                        className="edit-option-field"
-                                        key={i}
-                                      >
-                                        <h4>Option {LABELS[i]}</h4>
-                                        {!imageOption ? (
-                                          <>
-                                            <label>
-                                              Option text
-                                              <input
-                                                value={option}
-                                                onChange={(e) =>
-                                                  setEditDraft((p) => ({
-                                                    ...p,
-                                                    options: p.options.map(
-                                                      (v, j) =>
-                                                        j === i
-                                                          ? e.target.value
-                                                          : v,
-                                                    ),
-                                                  }))
-                                                }
-                                                placeholder={`Enter option ${LABELS[i]} text`}
-                                              />
-                                            </label>
-                                            <label>
-                                              Replace text with an image
-                                              (optional)
-                                              <input
-                                                type="file"
-                                                accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
-                                                onChange={(e) => {
-                                                  const file =
-                                                    e.target.files?.[0] || null;
-                                                  setEditDraft((p) => ({
-                                                    ...p,
-                                                    options: p.options.map(
-                                                      (v, j) =>
-                                                        j === i
-                                                          ? file
-                                                            ? isImagePath(v)
-                                                              ? normalizePath(v)
-                                                              : defaultPath
-                                                            : v
-                                                          : v,
-                                                    ),
-                                                    optionImageFiles: {
-                                                      ...p.optionImageFiles,
-                                                      [i]: file,
-                                                    },
-                                                  }));
-                                                  e.target.value = "";
-                                                }}
-                                              />
-                                            </label>
-                                          </>
-                                        ) : (
-                                          <>
-                                            {previewSrc ? (
-                                              <img
-                                                className="edit-image-preview option-image-preview"
-                                                src={previewSrc}
-                                                alt={`Option ${LABELS[i]} image preview`}
-                                              />
-                                            ) : (
-                                              <p
-                                                className="edit-image-warning"
-                                                role="status"
-                                              >
-                                                Missing image: {path}
-                                              </p>
-                                            )}
-                                            <label>
-                                              Image path / filename
-                                              <input
-                                                value={option}
-                                                onChange={(e) =>
-                                                  setEditDraft((p) => ({
-                                                    ...p,
-                                                    options: p.options.map(
-                                                      (v, j) =>
-                                                        j === i
-                                                          ? e.target.value
-                                                          : v,
-                                                    ),
-                                                  }))
-                                                }
-                                                placeholder={defaultPath}
-                                              />
-                                            </label>
-                                            <label>
-                                              Replace image
-                                              <input
-                                                type="file"
-                                                accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,image/svg+xml"
-                                                onChange={(e) => {
-                                                  const file =
-                                                    e.target.files?.[0] || null;
-                                                  setEditDraft((p) => ({
-                                                    ...p,
-                                                    optionImageFiles: {
-                                                      ...p.optionImageFiles,
-                                                      [i]: file,
-                                                    },
-                                                  }));
-                                                  e.target.value = "";
-                                                }}
-                                              />
-                                            </label>
-                                          </>
-                                        )}
-                                        {editDraft.optionImageFiles[i] && (
-                                          <small>
-                                            Selected:{" "}
-                                            {editDraft.optionImageFiles[i].name}
-                                          </small>
-                                        )}
-                                        {imageOption && (
-                                          <button
-                                            type="button"
-                                            className="button outline"
-                                            disabled={dbBusy}
-                                            onClick={() =>
-                                              setEditDraft((p) => ({
-                                                ...p,
-                                                options: p.options.map(
-                                                  (v, j) => (j === i ? "" : v),
-                                                ),
-                                                optionImageFiles: {
-                                                  ...p.optionImageFiles,
-                                                  [i]: null,
-                                                },
-                                              }))
-                                            }
-                                          >
-                                            Remove image / switch to text
-                                          </button>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                <label>
-                                  Correct answer
-                                  <select
-                                    value={editDraft.correctAnswerIndex ?? ""}
-                                    onChange={(e) =>
-                                      setEditDraft((p) => ({
-                                        ...p,
-                                        correctAnswerIndex:
-                                          e.target.value === ""
-                                            ? null
-                                            : Number(e.target.value),
-                                      }))
-                                    }
-                                  >
-                                    <option value="">
-                                      Unknown / needs review
-                                    </option>
-                                    {LABELS.map((label, i) => (
-                                      <option key={label} value={i}>
-                                        {label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-
-                                {/* Memory trick / explanation note */}
-                                <label>
-                                  Memory trick / explanation note
-                                  <textarea
-                                    rows={3}
-                                    value={editDraft.note}
-                                    onChange={(e) =>
-                                      setEditDraft((p) => ({
-                                        ...p,
-                                        note: e.target.value,
-                                      }))
-                                    }
-                                    placeholder="Shortcut, mnemonic, explanation, or formula..."
-                                  />
-                                </label>
-
-                                {/* Verification is explicit and validation still runs before saving. */}
-                                <label className="edit-verify-row">
-                                  <input
-                                    type="checkbox"
-                                    checked={editDraft.verified}
-                                    onChange={(e) =>
-                                      setEditDraft((p) => ({
-                                        ...p,
-                                        verified: e.target.checked,
-                                      }))
-                                    }
-                                  />
-                                  I verified the question, all four options, the
-                                  correct answer, and any required images.
-                                </label>
-
-                                <div className="button-row">
-                                  <button
-                                    className="button primary"
-                                    disabled={dbBusy}
-                                    onClick={() => saveQuestionEdits(q)}
-                                  >
-                                    Save changes
-                                  </button>
-
-                                  <button
-                                    className="button outline"
-                                    disabled={dbBusy}
-                                    onClick={() => {
-                                      setEditingQuestionId(null);
-                                      setEditDraft(null);
-                                    }}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            ) : expandedQuestionId === q.id ? (
-                              // 2. EXPANDED MODE
-                              <div className="question-detail-panel">
-                                <div className="question-detail-heading">
-                                  <strong>
-                                    Question {q.questionNumber} · Full details
-                                  </strong>
-                                  <button
-                                    type="button"
-                                    className="icon-button"
-                                    onClick={() => setExpandedQuestionId(null)}
-                                    aria-label="Close question details"
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                                {q.questionHtml ? (
-                                  <div
-                                    className="question-detail-stem question-detail-rich-html"
-                                    dangerouslySetInnerHTML={{
-                                      __html: sanitizeQuestionHtml(
-                                        q.questionHtml,
-                                      ),
-                                    }}
-                                  />
-                                ) : (
-                                  <div className="question-detail-stem">
-                                    {q.question ||
-                                      "Question text is not available in the source."}
-                                  </div>
-                                )}
-                                {q.questionImage &&
-                                  renderImage(
-                                    q.questionImage,
-                                    `Question ${q.questionNumber}`,
-                                    "question-image",
-                                    q.paperId,
-                                  )}
-                                <div className="question-detail-options">
-                                  {(q.options || []).map(
-                                    (option, optionIndex) => {
-                                      const optionImage = isImagePath(option);
-                                      const extraImage =
-                                        q.optionImageSources?.[optionIndex];
-                                      return (
-                                        <div
-                                          className="question-detail-option"
-                                          key={`${q.id}-detail-${optionIndex}`}
-                                        >
-                                          <span className="option-label">
-                                            {LABELS[optionIndex]}
-                                          </span>
-                                          <div>
-                                            {optionImage ? (
-                                              renderImage(
-                                                option,
-                                                `Option ${LABELS[optionIndex]}`,
-                                                "option-image",
-                                                q.paperId,
-                                              )
-                                            ) : (
-                                              <span>
-                                                {option || "Option unavailable"}
-                                              </span>
-                                            )}
-                                            {extraImage &&
-                                              renderImage(
-                                                extraImage,
-                                                `Option ${LABELS[optionIndex]} image`,
-                                                "option-image",
-                                                q.paperId,
-                                              )}
-                                          </div>
-                                          {q.correctAnswerIndex ===
-                                            optionIndex && (
-                                            <span className="detail-answer-tag">
-                                             KEY
-                                            </span>
-                                          )}
-                                          {q.source
-                                            ?.originalChosenOptionIndex ===
-                                            optionIndex && (
-                                            <span className="detail-choice-tag">
-                                              SEL
-                                            </span>
                                           )}
                                         </div>
                                       );
-                                    },
-                                  )}
+                                    })}
+                                  </div>
+
+                                  <label>
+                                    Correct answer
+                                    <select
+                                      value={editDraft.correctAnswerIndex ?? ""}
+                                      onChange={(e) =>
+                                        setEditDraft((p) => ({
+                                          ...p,
+                                          correctAnswerIndex:
+                                            e.target.value === ""
+                                              ? null
+                                              : Number(e.target.value),
+                                        }))
+                                      }
+                                    >
+                                      <option value="">
+                                        Unknown / needs review
+                                      </option>
+                                      {LABELS.map((label, i) => (
+                                        <option key={label} value={i}>
+                                          {label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+
+                                  {/* Memory trick / explanation note */}
+                                  <label>
+                                    Memory trick / explanation note
+                                    <textarea
+                                      rows={3}
+                                      value={editDraft.note}
+                                      onChange={(e) =>
+                                        setEditDraft((p) => ({
+                                          ...p,
+                                          note: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="Shortcut, mnemonic, explanation, or formula..."
+                                    />
+                                  </label>
+
+                                  {/* Verification is explicit and validation still runs before saving. */}
+                                  <label className="edit-verify-row">
+                                    <input
+                                      type="checkbox"
+                                      checked={editDraft.verified}
+                                      onChange={(e) =>
+                                        setEditDraft((p) => ({
+                                          ...p,
+                                          verified: e.target.checked,
+                                        }))
+                                      }
+                                    />
+                                    I verified the question, all four options,
+                                    the correct answer, and any required images.
+                                  </label>
+
+                                  <div className="button-row">
+                                    <button
+                                      className="button primary"
+                                      disabled={dbBusy}
+                                      onClick={() => saveQuestionEdits(q)}
+                                    >
+                                      Save changes
+                                    </button>
+
+                                    <button
+                                      className="button outline"
+                                      disabled={dbBusy}
+                                      onClick={() => {
+                                        setEditingQuestionId(null);
+                                        setEditDraft(null);
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
                                 </div>
-                                <div className="question-detail-meta">
-                                  <span>
-                                    <b>Subject:</b>{" "}
-                                    {q.subject || "Not provided"}
-                                  </span>
-                                  <span>
-                                    <b>Topic:</b> {q.topic || "Not provided"}
-                                  </span>
-                                  <span>
-                                    <b>Response status:</b>{" "}
-                                    {q.source?.originalStatus || "Not provided"}
-                                  </span>
-                                  <span>
-                                    <b>Candidate choice:</b>{" "}
-                                    {Number.isInteger(
-                                      q.source?.originalChosenOptionIndex,
-                                    )
-                                      ? LABELS[
-                                          q.source.originalChosenOptionIndex
-                                        ]
-                                      : "Not answered / not recorded"}
-                                  </span>
-                                  {/* <span>
+                              ) : expandedQuestionId === q.id ? (
+                                // 2. EXPANDED MODE
+                                <div className="question-detail-panel">
+                                  <div className="question-detail-heading">
+                                    <strong>
+                                      Question {q.questionNumber} · Full details
+                                    </strong>
+                                    <button
+                                      type="button"
+                                      className="icon-button"
+                                      onClick={() =>
+                                        setExpandedQuestionId(null)
+                                      }
+                                      aria-label="Close question details"
+                                    >
+                                      <X size={16} />
+                                    </button>
+                                  </div>
+                                  {q.questionHtml ? (
+                                    <div
+                                      className="question-detail-stem question-detail-rich-html"
+                                      dangerouslySetInnerHTML={{
+                                        __html: sanitizeQuestionHtml(
+                                          q.questionHtml,
+                                        ),
+                                      }}
+                                    />
+                                  ) : (
+                                    <div className="question-detail-stem">
+                                      {q.question ||
+                                        "Question text is not available in the source."}
+                                    </div>
+                                  )}
+                                  {q.questionImage &&
+                                    renderImage(
+                                      q.questionImage,
+                                      `Question ${q.questionNumber}`,
+                                      "question-image",
+                                      q.paperId,
+                                    )}
+                                  <div className="question-detail-options">
+                                    {(q.options || []).map(
+                                      (option, optionIndex) => {
+                                        const optionImage = isImagePath(option);
+                                        const extraImage =
+                                          q.optionImageSources?.[optionIndex];
+                                        return (
+                                          <div
+                                            className="question-detail-option"
+                                            key={`${q.id}-detail-${optionIndex}`}
+                                          >
+                                            <span className="option-label">
+                                              {LABELS[optionIndex]}
+                                            </span>
+                                            <div>
+                                              {optionImage ? (
+                                                renderImage(
+                                                  option,
+                                                  `Option ${LABELS[optionIndex]}`,
+                                                  "option-image",
+                                                  q.paperId,
+                                                )
+                                              ) : (
+                                                <span>
+                                                  {option ||
+                                                    "Option unavailable"}
+                                                </span>
+                                              )}
+                                              {extraImage &&
+                                                renderImage(
+                                                  extraImage,
+                                                  `Option ${LABELS[optionIndex]} image`,
+                                                  "option-image",
+                                                  q.paperId,
+                                                )}
+                                            </div>
+                                            {q.correctAnswerIndex ===
+                                              optionIndex && (
+                                              <span className="detail-answer-tag">
+                                                KEY
+                                              </span>
+                                            )}
+                                            {q.source
+                                              ?.originalChosenOptionIndex ===
+                                              optionIndex && (
+                                              <span className="detail-choice-tag">
+                                                SEL
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      },
+                                    )}
+                                  </div>
+                                  <div className="question-detail-meta">
+                                    <span>
+                                      <b>Subject:</b>{" "}
+                                      {q.subject || "Not provided"}
+                                    </span>
+                                    <span>
+                                      <b>Topic:</b> {q.topic || "Not provided"}
+                                    </span>
+                                    <span>
+                                      <b>Response status:</b>{" "}
+                                      {q.source?.originalStatus ||
+                                        "Not provided"}
+                                    </span>
+                                    <span>
+                                      <b>Candidate choice:</b>{" "}
+                                      {Number.isInteger(
+                                        q.source?.originalChosenOptionIndex,
+                                      )
+                                        ? LABELS[
+                                            q.source.originalChosenOptionIndex
+                                          ]
+                                        : "Not answered / not recorded"}
+                                    </span>
+                                    {/* <span>
                                     <b>Source question ID:</b>{" "}
                                     {q.source?.questionId || "Not provided"}
                                   </span>
@@ -4506,290 +4541,292 @@ function App() {
                                       ? "Verified from official green marker"
                                       : "Not verified"}
                                   </span> */}
-                                </div>
-                                {(q.notes || state.note) && (
-                                  <div className="question-detail-note">
-                                    <b>Note:</b> {q.notes || state.note}
                                   </div>
-                                )}
-                                {(() => {
-                                  const hasQuestionText =
-                                    typeof q.question === "string" &&
-                                    q.question.trim().length > 0;
+                                  {(q.notes || state.note) && (
+                                    <div className="question-detail-note">
+                                      <b>Note:</b> {q.notes || state.note}
+                                    </div>
+                                  )}
+                                  {(() => {
+                                    const hasQuestionText =
+                                      typeof q.question === "string" &&
+                                      q.question.trim().length > 0;
 
-                                  const hasQuestionImage =
-                                    (typeof q.questionImage === "string" &&
-                                      q.questionImage.trim().length > 0) ||
-                                    (Array.isArray(q.questionImages) &&
-                                      q.questionImages.some(
-                                        (image) =>
-                                          typeof image === "string" &&
-                                          image.trim().length > 0,
-                                      ));
+                                    const hasQuestionImage =
+                                      (typeof q.questionImage === "string" &&
+                                        q.questionImage.trim().length > 0) ||
+                                      (Array.isArray(q.questionImages) &&
+                                        q.questionImages.some(
+                                          (image) =>
+                                            typeof image === "string" &&
+                                            image.trim().length > 0,
+                                        ));
 
-                                  const checks = [
-                                    {
-                                      label: "Question stem",
-                                      passed:
-                                        hasQuestionText || hasQuestionImage,
-                                      detail: hasQuestionText
-                                        ? "Text available"
-                                        : hasQuestionImage
-                                          ? "Image-based question"
-                                          : "Neither text nor image found",
-                                    },
-                                    {
-                                      label: "Four options",
-                                      passed:
-                                        Array.isArray(q.options) &&
-                                        q.options.length === 4 &&
-                                        q.options.every((option) =>
-                                          String(option || "").trim(),
-                                        ),
-                                      detail: `${q.options?.filter((option) => String(option || "").trim()).length || 0}/4 available`,
-                                    },
-                                    {
-                                      label: "Answer key",
-                                      passed:
-                                        Number.isInteger(
+                                    const checks = [
+                                      {
+                                        label: "Question stem",
+                                        passed:
+                                          hasQuestionText || hasQuestionImage,
+                                        detail: hasQuestionText
+                                          ? "Text available"
+                                          : hasQuestionImage
+                                            ? "Image-based question"
+                                            : "Neither text nor image found",
+                                      },
+                                      {
+                                        label: "Four options",
+                                        passed:
+                                          Array.isArray(q.options) &&
+                                          q.options.length === 4 &&
+                                          q.options.every((option) =>
+                                            String(option || "").trim(),
+                                          ),
+                                        detail: `${q.options?.filter((option) => String(option || "").trim()).length || 0}/4 available`,
+                                      },
+                                      {
+                                        label: "Answer key",
+                                        passed:
+                                          Number.isInteger(
+                                            q.correctAnswerIndex,
+                                          ) &&
+                                          q.correctAnswerIndex >= 0 &&
+                                          q.correctAnswerIndex < 4,
+                                        detail: Number.isInteger(
                                           q.correctAnswerIndex,
-                                        ) &&
-                                        q.correctAnswerIndex >= 0 &&
-                                        q.correctAnswerIndex < 4,
-                                      detail: Number.isInteger(
-                                        q.correctAnswerIndex,
-                                      )
-                                        ? `Option ${LABELS[q.correctAnswerIndex]}`
-                                        : "Missing or invalid",
-                                    },
-                                    {
-                                      label: "Visual review",
-                                      passed: !q.visualReviewNeeded,
-                                      detail: q.visualReviewNeeded
-                                        ? "Review required"
-                                        : "No flag",
-                                    },
-                                    {
-                                      label: "Practice ready",
-                                      passed: q.practiceReady === true,
-                                      detail: String(q.practiceReady),
-                                    },
-                                    {
-                                      label: "Review reasons",
-                                      passed: !q.reviewReasons?.length,
-                                      detail: q.reviewReasons?.length
-                                        ? q.reviewReasons.join("; ")
-                                        : "None recorded",
-                                    },
-                                  ];
-                                  const failedChecks = checks.filter(
-                                    (check) => !check.passed,
-                                  );
+                                        )
+                                          ? `Option ${LABELS[q.correctAnswerIndex]}`
+                                          : "Missing or invalid",
+                                      },
+                                      {
+                                        label: "Visual review",
+                                        passed: !q.visualReviewNeeded,
+                                        detail: q.visualReviewNeeded
+                                          ? "Review required"
+                                          : "No flag",
+                                      },
+                                      {
+                                        label: "Practice ready",
+                                        passed: q.practiceReady === true,
+                                        detail: String(q.practiceReady),
+                                      },
+                                      {
+                                        label: "Review reasons",
+                                        passed: !q.reviewReasons?.length,
+                                        detail: q.reviewReasons?.length
+                                          ? q.reviewReasons.join("; ")
+                                          : "None recorded",
+                                      },
+                                    ];
+                                    const failedChecks = checks.filter(
+                                      (check) => !check.passed,
+                                    );
 
-                                  return (
-                                    failedChecks.length > 0 && (
-                                      <div className="validation-diagnostics">
-                                        <strong className="validation-diagnostics-title">
-                                          Question validation diagnostics
-                                          <span className="validation-failure-count">
-                                            {failedChecks.length} issue
-                                            {failedChecks.length !== 1
-                                              ? "s"
-                                              : ""}
-                                          </span>
-                                        </strong>
+                                    return (
+                                      failedChecks.length > 0 && (
+                                        <div className="validation-diagnostics">
+                                          <strong className="validation-diagnostics-title">
+                                            Question validation diagnostics
+                                            <span className="validation-failure-count">
+                                              {failedChecks.length} issue
+                                              {failedChecks.length !== 1
+                                                ? "s"
+                                                : ""}
+                                            </span>
+                                          </strong>
 
-                                        <div className="validation-checks">
-                                          {failedChecks.map((check) => (
-                                            <div
-                                              key={check.label}
-                                              className="validation-check check-failed"
-                                            >
-                                              <span className="validation-check-icon">
-                                                ✕
-                                              </span>
+                                          <div className="validation-checks">
+                                            {failedChecks.map((check) => (
+                                              <div
+                                                key={check.label}
+                                                className="validation-check check-failed"
+                                              >
+                                                <span className="validation-check-icon">
+                                                  ✕
+                                                </span>
 
-                                              <div className="validation-check-content">
-                                                <strong>{check.label}</strong>
-                                                <span>{check.detail}</span>
+                                                <div className="validation-check-content">
+                                                  <strong>{check.label}</strong>
+                                                  <span>{check.detail}</span>
+                                                </div>
                                               </div>
-                                            </div>
-                                          ))}
+                                            ))}
+                                          </div>
                                         </div>
-                                      </div>
-                                    )
-                                  );
-                                })()}
-                                <div className="button-row question-detail-actions">
-                                  <button
-                                    className="button primary"
-                                    onClick={() => startEditingQuestion(q)}
-                                    disabled={dbBusy}
-                                  >
-                                    Edit question
-                                  </button>
-                                  <button
-                                    className="button outline"
-                                    onClick={() => setExpandedQuestionId(null)}
-                                  >
-                                    Close details
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              // 3. NORMAL MODE
-                              <>
-                                <div className="coverage-question-main">
-                                  <span className="coverage-q-number">
-                                    Q{q.questionNumber}
-                                  </span>
-                                  <div className="coverage-q-copy">
-                                    <strong>
-                                      {(
-                                        q.question ||
-                                        (q.questionImage ||
-                                        (Array.isArray(q.questionImages) &&
-                                          q.questionImages.length > 0)
-                                          ? `Image-based question — ${q.id}`
-                                          : `Question text missing — ${q.id}`)
                                       )
-                                        .replace(/\s+/g, " ")
-                                        .slice(0, 450)}
-                                      {(q.question || "").length > 450 && "…"}
-                                    </strong>
-                                    {q.questionImage && (
-                                      <div className="source-image-wrap">
-                                        {renderImage(
-                                          q.questionImage,
-                                          `Question ${q.questionNumber}`,
-                                          "question-image",
-                                          q.paperId,
+                                    );
+                                  })()}
+                                  <div className="button-row question-detail-actions">
+                                    <button
+                                      className="button primary"
+                                      onClick={() => startEditingQuestion(q)}
+                                      disabled={dbBusy}
+                                    >
+                                      Edit question
+                                    </button>
+                                    <button
+                                      className="button outline"
+                                      onClick={() =>
+                                        setExpandedQuestionId(null)
+                                      }
+                                    >
+                                      Close details
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                // 3. NORMAL MODE
+                                <>
+                                  <div className="coverage-question-main">
+                                    <span className="coverage-q-number">
+                                      Q{q.questionNumber}
+                                    </span>
+                                    <div className="coverage-q-copy">
+                                      <strong>
+                                        {(
+                                          q.question ||
+                                          (q.questionImage ||
+                                          (Array.isArray(q.questionImages) &&
+                                            q.questionImages.length > 0)
+                                            ? `Image-based question — ${q.id}`
+                                            : `Question text missing — ${q.id}`)
+                                        )
+                                          .replace(/\s+/g, " ")
+                                          .slice(0, 450)}
+                                        {(q.question || "").length > 450 && "…"}
+                                      </strong>
+                                      {q.questionImage && (
+                                        <div className="source-image-wrap">
+                                          {renderImage(
+                                            q.questionImage,
+                                            `Question ${q.questionNumber}`,
+                                            "question-image",
+                                            q.paperId,
+                                          )}
+                                        </div>
+                                      )}
+                                      <small>
+                                        {q.subject || "Unclassified"} ·{" "}
+                                        {q.topic || "Unclassified"}
+                                      </small>
+                                      <div className="tags compact">
+                                        <span
+                                          className={
+                                            state.attempts.length
+                                              ? "tag-covered"
+                                              : "tag-uncovered"
+                                          }
+                                        >
+                                          {questionStatus(q, progress)}
+                                        </span>
+                                        {q.visualReviewNeeded && (
+                                          <span className="tag-warning">
+                                            Visual/source review
+                                          </span>
                                         )}
-                                      </div>
-                                    )}
-                                    <small>
-                                      {q.subject || "Unclassified"} ·{" "}
-                                      {q.topic || "Unclassified"}
-                                    </small>
-                                    <div className="tags compact">
-                                      <span
-                                        className={
-                                          state.attempts.length
-                                            ? "tag-covered"
-                                            : "tag-uncovered"
-                                        }
-                                      >
-                                        {questionStatus(q, progress)}
-                                      </span>
-                                      {q.visualReviewNeeded && (
-                                        <span className="tag-warning">
-                                          Visual/source review
-                                        </span>
-                                      )}
-                                      {!ready && (
-                                        <span className="tag-warning">
-                                          Not practice-ready
-                                        </span>
-                                      )}
-                                      {state.marked && (
-                                        <span>Marked for review</span>
-                                      )}
-                                      {state.attempts.some(
-                                        (a) => !a.correct,
-                                      ) && (
-                                        <span className="tag-error">
-                                          Wrong attempt
-                                        </span>
-                                      )}
-                                      {/* {q.answerValidation ===
+                                        {!ready && (
+                                          <span className="tag-warning">
+                                            Not practice-ready
+                                          </span>
+                                        )}
+                                        {state.marked && (
+                                          <span>Marked for review</span>
+                                        )}
+                                        {state.attempts.some(
+                                          (a) => !a.correct,
+                                        ) && (
+                                          <span className="tag-error">
+                                            Wrong attempt
+                                          </span>
+                                        )}
+                                        {/* {q.answerValidation ===
                                         "source-key-verified" && (
                                         <span className="tag-covered">
                                           Key verified
                                         </span>
                                       )} */}
-                                      {q.answerValidation ===
-                                        "source-key-unverified" && (
-                                        <span className="tag-warning">
-                                          Key unverified
-                                        </span>
+                                        {q.answerValidation ===
+                                          "source-key-unverified" && (
+                                          <span className="tag-warning">
+                                            Key unverified
+                                          </span>
+                                        )}
+                                      </div>
+                                      {q.reviewReasons?.length > 0 && (
+                                        <small className="source-small">
+                                          {q.reviewReasons.join("; ")}
+                                        </small>
+                                      )}
+                                      {q.notes && (
+                                        <small className="saved-note">
+                                          {q.notes}
+                                        </small>
                                       )}
                                     </div>
-                                    {q.reviewReasons?.length > 0 && (
-                                      <small className="source-small">
-                                        {q.reviewReasons.join("; ")}
-                                      </small>
-                                    )}
-                                    {q.notes && (
-                                      <small className="saved-note">
-                                        {q.notes}
-                                      </small>
-                                    )}
                                   </div>
-                                </div>
-                                <div className="coverage-buttons">
-                                <button
-                                  className="button outline coverage-open-button"
-                                  onClick={() => startEditingQuestion(q)}
-                                  disabled={dbBusy}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  className="button outline coverage-open-button"
-                                  onClick={() => openCoverageQuestion(q)}
-                                  aria-expanded={false}
-                                >
-                                  Open
-                                </button>
-                                </div>
-                              </>
-                            )}
+                                  <div className="coverage-buttons">
+                                    <button
+                                      className="button outline coverage-open-button"
+                                      onClick={() => startEditingQuestion(q)}
+                                      disabled={dbBusy}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="button outline coverage-open-button"
+                                      onClick={() => openCoverageQuestion(q)}
+                                      aria-expanded={false}
+                                    >
+                                      Open
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {coverageQuestions.length === 0 && (
+                          <div className="empty-list">
+                            No questions match this paper, status, and search.
                           </div>
-                        );
-                      })}
-                      {coverageQuestions.length === 0 && (
-                        <div className="empty-list">
-                          No questions match this paper, status, and search.
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </section>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </section>
 
-          <section className="panel coverage-panel">
-            <h2>Topic coverage</h2>
-            {!statsByTopic.length ? (
-              <p className="section-subtitle">
-                Topic statistics will appear after importing questions.
-              </p>
-            ) : (
-              <div className="topic-list">
-                {statsByTopic.map(([name, s]) => (
-                  <div className="topic-row" key={name}>
-                    <div>
-                      <span>{name}</span>
-                      <small>
-                        {s.attempted}/{s.total} covered · {s.wrong} with errors
-                        · {s.marked} marked
-                      </small>
+            <section className="panel coverage-panel">
+              <h2>Topic coverage</h2>
+              {!statsByTopic.length ? (
+                <p className="section-subtitle">
+                  Topic statistics will appear after importing questions.
+                </p>
+              ) : (
+                <div className="topic-list">
+                  {statsByTopic.map(([name, s]) => (
+                    <div className="topic-row" key={name}>
+                      <div>
+                        <span>{name}</span>
+                        <small>
+                          {s.attempted}/{s.total} covered · {s.wrong} with
+                          errors · {s.marked} marked
+                        </small>
+                      </div>
+                      <div className="mini-progress">
+                        <span
+                          style={{
+                            width: `${s.total ? (s.attempted / s.total) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="mini-progress">
-                      <span
-                        style={{
-                          width: `${s.total ? (s.attempted / s.total) * 100 : 0}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </section>
           </section>
-        </section>
-      </main>
+        </main>
       )}
       {examOpen && (
         <ExamExperience
