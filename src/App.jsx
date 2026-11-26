@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 import ExamExperience from "./ExamExperience.jsx";
+import AnalyticsDashboard from "./AnalyticsDashboard.jsx";
 import {
   parseTcsIonResponseSheet,
   sanitizeQuestionHtml,
@@ -34,6 +35,7 @@ import {
   Tags,
   Save,
   Clock3,
+  BarChart3,
 } from "lucide-react";
 
 const PROGRESS_KEY = "rrb-je-pyq-progress-v1";
@@ -405,6 +407,7 @@ function App() {
   // This allows a paper with zero questions to appear in coverage.
   const [paperRecords, setPaperRecords] = useState([]);
   const [examOpen, setExamOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   // Master subject/topic list stored in IndexedDB.
   const [categoryRecords, setCategoryRecords] = useState([]);
@@ -2321,6 +2324,11 @@ function App() {
             this browser
           </p>
         </div>
+        <div className="topbar-actions">
+          <button className="button analytics-nav-button" onClick={() => setAnalyticsOpen((open) => !open)}>
+            <BarChart3 size={16} /> {analyticsOpen ? "Question bank" : "Analytics"}
+          </button>
+        </div>
         {/* <div className="button-row">
            <button
              className="button light"
@@ -2332,6 +2340,9 @@ function App() {
          </div> */}
       </header>
 
+      {analyticsOpen ? (
+        <AnalyticsDashboard papers={paperRecords} onBack={() => setAnalyticsOpen(false)} />
+      ) : (
       <main className="layout">
         {/* Mobile-only toggle; hidden on desktop by index.css. */}
         <button
@@ -4779,6 +4790,7 @@ function App() {
           </section>
         </section>
       </main>
+      )}
       {examOpen && (
         <ExamExperience
           questions={bank}
