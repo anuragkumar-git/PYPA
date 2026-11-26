@@ -1,0 +1,148 @@
+.pi {
+  --pi-line: color-mix(in srgb, currentColor 18%, transparent);
+  --pi-ok: #1f9d55;
+  --pi-warn: #c77700;
+  --pi-bad: #d33;
+  font: inherit;
+}
+.pi * {
+  box-sizing: border-box;
+}
+.pi-drop {
+  border: 2px dashed var(--pi-line);
+  border-radius: 12px;
+  padding: 32px 16px;
+  text-align: center;
+  cursor: pointer;
+}
+.pi-drop.over,
+.pi-drop:hover {
+  border-color: currentColor;
+}
+.pi-drop small {
+  display: block;
+  opacity: 0.65;
+  margin-top: 6px;
+}
+.pi-bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--pi-line);
+  overflow: hidden;
+  margin: 12px 0 6px;
+}
+.pi-bar > div {
+  height: 100%;
+  background: currentColor;
+  transition: width 0.2s;
+}
+.pi-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.pi-chip {
+  border: 1px solid var(--pi-line);
+  border-radius: 99px;
+  padding: 3px 10px;
+  font-size: 0.85em;
+}
+.pi-chip.warn {
+  border-color: var(--pi-warn);
+  color: var(--pi-warn);
+}
+.pi-title {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--pi-line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.pi-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+.pi-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--pi-line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.pi-btn.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.pi-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pi-list {
+  display: grid;
+  gap: 10px;
+}
+.pi-q {
+  border: 1px solid var(--pi-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.pi-q.flagged {
+  border-color: var(--pi-warn);
+}
+.pi-qh {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8em;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+.pi-text {
+  white-space: pre-wrap;
+  margin: 0 0 6px;
+}
+.pi-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+.pi-opt {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  margin: 3px 0;
+  border-radius: 8px;
+  border: 1px solid var(--pi-line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.pi-opt.ok {
+  border-color: var(--pi-ok);
+  background: color-mix(in srgb, var(--pi-ok) 14%, transparent);
+}
+.pi-opt b {
+  min-width: 1.4em;
+}
+.pi-flag {
+  color: var(--pi-warn);
+  font-size: 0.8em;
+}
+.pi-err {
+  color: var(--pi-bad);
+}

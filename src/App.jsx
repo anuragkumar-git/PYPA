@@ -37,6 +37,7 @@ import {
   Clock3,
   BarChart3,
 } from "lucide-react";
+import PaperImport from "./pdfImport/PaperImport.jsx";
 
 const PROGRESS_KEY = "rrb-je-pyq-progress-v1";
 const LABELS = ["A", "B", "C", "D"];
@@ -2683,6 +2684,12 @@ function App() {
                         Start session
                       </button>
                     )}
+                    <PaperImport
+                      onImport={async (paper) => {
+                        await savePaperToIndexedDB(paper);
+                      }}
+                      onCancel={() => navigate(-1)}
+                    />
                   </div>
                 )
               ) : (
