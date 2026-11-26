@@ -372,7 +372,11 @@ export async function saveExamAttempt(attempt, questions) {
     throw new Error("The submitted exam has no questions to save.");
   }
 
-  const answers = questions.map((question) => {
+  const sectionByQuestion = new Map();
+  (attempt.sections || []).forEach((section) => {
+    (section.questionIds || []).forEach((questionId) => sectionByQuestion.set(questionId, section.name || "General"));
+  });
+  const answers = questions.map((question, questionIndex) => {
     const response = attempt.answers?.[question.id] || {};
     const attempted = Number.isInteger(response.answerIndex);
     const correctAtSubmission = attempted && response.answerIndex === question.correctAnswerIndex;
@@ -385,6 +389,8 @@ export async function saveExamAttempt(attempt, questions) {
       id: `${attempt.id}::${question.id}`,
       attemptId: attempt.id,
       questionId: question.id,
+      questionIndex,
+      sectionName: sectionByQuestion.get(question.id) || question.subject || "General",
       paperId: attempt.paperId,
       selectedAnswerIndex: attempted ? response.answerIndex : null,
       isAttempted: attempted,

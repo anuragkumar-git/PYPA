@@ -2734,3 +2734,129 @@ footer {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+/* Read-only submitted exam review */
+.exam-review-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 16px;
+  background: #edf5f1;
+  border-bottom: 1px solid #dce8e1;
+  color: #31594b;
+  font-size: 11px;
+}
+.exam-review-banner strong {
+  font-size: 12px;
+  color: #1d4e3f;
+}
+.exam-review-banner span {
+  color: #6a7c73;
+}
+.exam-review-banner .button {
+  margin-left: auto;
+}
+.exam-review-toolbar-meta {
+  margin-left: auto;
+  color: #65786f;
+  font-size: 11px;
+}
+.exam-option.review-correct {
+  border-color: #17845e;
+  background: #e7f7ed;
+  box-shadow: inset 4px 0 0 #17845e;
+}
+.exam-option.review-incorrect {
+  border-color: #c94a4a;
+  background: #fff0ee;
+  box-shadow: inset 4px 0 0 #c94a4a;
+}
+.exam-option.review-correct > span {
+  background: #17845e;
+  color: #fff;
+}
+.exam-option.review-incorrect > span {
+  background: #c94a4a;
+  color: #fff;
+}
+.exam-review-details {
+  margin-top: 16px;
+  border: 1px solid #dce8e1;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.exam-review-verdict {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 11px 13px;
+  font-size: 12px;
+}
+.exam-review-verdict.correct {
+  background: #e8f6ec;
+  color: #21683a;
+}
+.exam-review-verdict.incorrect {
+  background: #fff0ee;
+  color: #a52c2c;
+}
+.exam-review-verdict.unanswered {
+  background: #f1f4f2;
+  color: #52675c;
+}
+.exam-review-verdict span {
+  font-size: 11px;
+}
+.exam-review-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: #e5ece8;
+}
+.exam-review-metrics > div {
+  min-width: 0;
+  padding: 10px 12px;
+  background: #f8fbf9;
+}
+.exam-review-metrics small,
+.exam-review-metrics b {
+  display: block;
+}
+.exam-review-metrics small {
+  color: #78877f;
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+.exam-review-metrics b {
+  color: #29483b;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.exam-review-change-log {
+  padding: 11px 13px;
+  border-top: 1px solid #e5ece8;
+  font-size: 11px;
+  color: #52675c;
+}
+.exam-review-change-log p {
+  margin: 6px 0 0;
+}
+.analytics-review-button {
+  padding: 6px 9px;
+  font-size: 10px;
+}
+.analytics-review-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+@media (max-width: 560px) {
+  .exam-review-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .exam-review-banner .button {
+    margin-left: 0;
+  }
+}

@@ -258,6 +258,7 @@ export default function ExamExperience({
   papers,
   imageUrls = {},
   onSavePaperSettings,
+  reviewAttempt = null,
   onClose,
 }) {
   const paperIds = useMemo(
@@ -301,6 +302,7 @@ export default function ExamExperience({
   const examRef = useRef(null);
   examRef.current = exam;
   useEffect(() => {
+    if (reviewAttempt) return;
     const savedExam = loadSavedExam();
     if (savedExam && ["running", "submitted"].includes(savedExam.status)) {
       const savedQuestionIds =
@@ -443,6 +445,111 @@ export default function ExamExperience({
     }
   }, []);
 
+  // Build an immutable, read-only exam view from the selected analytics record.
+  useEffect(() => {
+    if (!reviewAttempt) return;
+    const responses = [...(reviewAttempt.responses || [])];
+    const configuredOrder = (reviewAttempt.config?.sections || []).flatMap(
+      (section) => section.questionIds || [],
+    );
+    const configuredPosition = new Map(
+      configuredOrder.map((id, index) => [id, index]),
+    );
+    responses.sort((a, b) => {
+      if (
+        Number.isInteger(a.questionIndex) &&
+        Number.isInteger(b.questionIndex)
+      ) {
+        return a.questionIndex - b.questionIndex;
+      }
+      const aNumber = Number(a.question?.questionNumber);
+      const bNumber = Number(b.question?.questionNumber);
+      if (
+        Number.isFinite(aNumber) &&
+        Number.isFinite(bNumber) &&
+        aNumber !== bNumber
+      ) {
+        return aNumber - bNumber;
+      }
+      return (
+        (configuredPosition.get(a.questionId) ?? 0) -
+        (configuredPosition.get(b.questionId) ?? 0)
+      );
+    });
+    const reviewQuestions = responses
+      .map((response) => response.question)
+      .filter(Boolean);
+    const answers = Object.fromEntries(
+      responses.map((response) => [
+        response.questionId,
+        {
+          answerIndex: Number.isInteger(response.selectedAnswerIndex)
+            ? response.selectedAnswerIndex
+            : null,
+          visited: Boolean(response.visited),
+          marked: Boolean(response.marked),
+          timeSpentMs: Math.max(0, Number(response.timeSpentMs) || 0),
+          visitCount: Math.max(0, Number(response.visitCount) || 0),
+          answerChangeCount: Math.max(
+            0,
+            Number(response.answerChangeCount) || 0,
+          ),
+          answerChanges: Array.isArray(response.answerChanges)
+            ? response.answerChanges
+            : [],
+          activeSince: null,
+        },
+      ]),
+    );
+    const availableIds = new Set(
+      reviewQuestions.map((question) => question.id),
+    );
+    let reviewSections = (reviewAttempt.config?.sections || [])
+      .map((section) => ({
+        name: section.name || "General",
+        questionIds: (section.questionIds || []).filter((id) =>
+          availableIds.has(id),
+        ),
+        durationSeconds: section.durationSeconds ?? null,
+        deadline: null,
+        locked: false,
+      }))
+      .filter((section) => section.questionIds.length);
+    if (!reviewSections.length)
+      reviewSections = makeSections(reviewQuestions).map((section) => ({
+        ...section,
+        deadline: null,
+        locked: false,
+      }));
+    if (!reviewQuestions.length) {
+      setSetupError("The questions for this exam are no longer available.");
+      return;
+    }
+    setPaperId(reviewAttempt.paperId);
+    setNow(Number(reviewAttempt.submittedAt) || Date.now());
+    setExam({
+      id: reviewAttempt.id,
+      paperId: reviewAttempt.paperId,
+      status: "review",
+      startedAt: reviewAttempt.startedAt,
+      submittedAt: reviewAttempt.submittedAt,
+      questions: reviewQuestions,
+      answers,
+      sections: reviewSections,
+      currentQuestionId: reviewQuestions[0].id,
+      config: {
+        sectionNavigation: "free",
+        sectionalTiming: false,
+        positiveMarks: Number(reviewAttempt.positiveMarks) || 0,
+        negativeMarks: Number(reviewAttempt.negativeMarks) || 0,
+        overallDurationSeconds: reviewAttempt.durationMs
+          ? Math.round(reviewAttempt.durationMs / 1000)
+          : null,
+      },
+      finishReason: reviewAttempt.finishReason || "manual",
+    });
+  }, [reviewAttempt]);
+
   useEffect(() => {
     setNavigation(
       savedSettings.sectionNavigation === "timed"
@@ -491,7 +598,7 @@ export default function ExamExperience({
   }, [exam?.status]);
 
   useEffect(() => {
-    if (exam) {
+    if (exam && exam.status !== "review") {
       const { questions: examQuestions, ...persisted } = exam;
       localStorage.setItem(
         ACTIVE_EXAM_KEY,
@@ -607,6 +714,7 @@ export default function ExamExperience({
     return map;
   }, [activeSections]);
 
+  const reviewMode = exam?.status === "review";
   const currentQuestion =
     exam?.questions.find((q) => q.id === exam.currentQuestionId) || null;
   const currentQuestionIndex = exam
@@ -626,12 +734,16 @@ export default function ExamExperience({
   const currentSectionQuestionPosition = currentQuestion
     ? currentSectionQuestionIds.indexOf(currentQuestion.id)
     : -1;
-  const previousQuestionId = sectionalTiming
-    ? currentSectionQuestionIds[currentSectionQuestionPosition - 1]
-    : exam?.questions[currentQuestionIndex - 1]?.id;
-  const nextQuestionId = sectionalTiming
-    ? currentSectionQuestionIds[currentSectionQuestionPosition + 1]
-    : exam?.questions[currentQuestionIndex + 1]?.id;
+  const previousQuestionId = reviewMode
+    ? exam?.questions[currentQuestionIndex - 1]?.id
+    : sectionalTiming
+      ? currentSectionQuestionIds[currentSectionQuestionPosition - 1]
+      : exam?.questions[currentQuestionIndex - 1]?.id;
+  const nextQuestionId = reviewMode
+    ? exam?.questions[currentQuestionIndex + 1]?.id
+    : sectionalTiming
+      ? currentSectionQuestionIds[currentSectionQuestionPosition + 1]
+      : exam?.questions[currentQuestionIndex + 1]?.id;
 
   const overallRemaining = exam?.overallDeadline
     ? Math.max(0, Math.ceil((exam.overallDeadline - now) / 1000))
@@ -643,7 +755,12 @@ export default function ExamExperience({
   // Keep the active question visible inside the palette.
   // Scroll only the palette, never the entire page.
   useEffect(() => {
-    if (exam?.status !== "running" || currentQuestionIndex < 0) return;
+    if (
+      !exam ||
+      !["running", "review"].includes(exam.status) ||
+      currentQuestionIndex < 0
+    )
+      return;
 
     const grid = paletteGridRef.current;
     const item = grid?.querySelector(
@@ -908,10 +1025,20 @@ export default function ExamExperience({
   function navigateTo(questionId) {
     if (
       !exam ||
-      exam.status !== "running" ||
+      !["running", "review"].includes(exam.status) ||
       questionId === exam.currentQuestionId
     )
       return;
+    if (exam.status === "review") {
+      if (!exam.questions.some((question) => question.id === questionId))
+        return;
+      setExam((prev) =>
+        prev?.status === "review"
+          ? { ...prev, currentQuestionId: questionId }
+          : prev,
+      );
+      return;
+    }
 
     const targetIndex = sectionByQuestion[questionId];
     const activeIndex = sectionByQuestion[exam.currentQuestionId] ?? 0;
@@ -968,7 +1095,12 @@ export default function ExamExperience({
     });
   }
   function updateAnswer(answerIndex) {
-    if (!currentQuestion || currentSection?.locked) return;
+    if (
+      !currentQuestion ||
+      exam?.status !== "running" ||
+      currentSection?.locked
+    )
+      return;
     if (sectionalTiming && currentSection?.deadline <= Date.now()) {
       setNow(Date.now());
       return;
@@ -979,7 +1111,12 @@ export default function ExamExperience({
     }));
   }
   function clearAnswer() {
-    if (!currentQuestion || currentSection?.locked) return;
+    if (
+      !currentQuestion ||
+      exam?.status !== "running" ||
+      currentSection?.locked
+    )
+      return;
     if (sectionalTiming && currentSection?.deadline <= Date.now()) {
       setNow(Date.now());
       return;
@@ -990,7 +1127,12 @@ export default function ExamExperience({
     }));
   }
   function toggleReview() {
-    if (!currentQuestion || currentSection?.locked) return;
+    if (
+      !currentQuestion ||
+      exam?.status !== "running" ||
+      currentSection?.locked
+    )
+      return;
     if (sectionalTiming && currentSection?.deadline <= Date.now()) {
       setNow(Date.now());
       return;
@@ -1084,7 +1226,9 @@ export default function ExamExperience({
         <header className="exam-header">
           <div>
             <h2>
-              <span className="exam-eyebrow">EXAM : </span>
+              <span className="exam-eyebrow">
+                {exam?.status === "review" ? "REVIEW MODE : " : "EXAM : "}
+              </span>
               {exam ? exam.paperId : "Configure your exam"}
             </h2>
           </div>
@@ -1277,8 +1421,32 @@ export default function ExamExperience({
           </div>
         )}
 
-        {exam?.status === "running" && (
-          <div className="exam-running">
+        {(exam?.status === "running" || reviewMode) && (
+          <div
+            className={`exam-running ${reviewMode ? "exam-review-mode" : ""}`}
+          >
+            {reviewMode ? (
+              <div className="exam-review-banner">
+                <strong>Submitted exam review</strong>
+                <span>
+                  Read-only · {new Date(exam.submittedAt).toLocaleString()} ·
+                  Score{" "}
+                  {Number(
+                    reviewAttempt?.score ??
+                      reviewAttempt?.scoreAtSubmission ??
+                      0,
+                  ).toFixed(2)}{" "}
+                  /{" "}
+                  {Number(
+                    reviewAttempt?.maximumMarks ??
+                      exam.questions.length * exam.config.positiveMarks,
+                  ).toFixed(2)}
+                </span>
+                <button className="button outline" onClick={onClose}>
+                  Back to analytics
+                </button>
+              </div>
+            ) : null}
             <div className="exam-toolbar">
               {sectionalTiming ? (
                 <div className="exam-timer">
@@ -1293,9 +1461,11 @@ export default function ExamExperience({
                         : ""
                     }
                   >
-                    {sectionRemaining === null
-                      ? "No limit"
-                      : formatTime(sectionRemaining)}
+                    {reviewMode
+                      ? "Review"
+                      : sectionRemaining === null
+                        ? "No limit"
+                        : formatTime(sectionRemaining)}
                   </strong>
                 </div>
               ) : (
@@ -1309,18 +1479,31 @@ export default function ExamExperience({
                         : ""
                     }
                   >
-                    {overallRemaining === null
-                      ? "No limit"
-                      : formatTime(overallRemaining)}
+                    {reviewMode
+                      ? "Review"
+                      : overallRemaining === null
+                        ? "No limit"
+                        : formatTime(overallRemaining)}
                   </strong>
                 </div>
               )}
-              <button
-                className="button outline"
-                onClick={() => setConfirmSubmit(true)}
-              >
-                Submit exam
-              </button>
+              {!reviewMode && (
+                <button
+                  className="button outline"
+                  onClick={() => setConfirmSubmit(true)}
+                >
+                  Submit exam
+                </button>
+              )}
+              {reviewMode && (
+                <div className="exam-review-toolbar-meta">
+                  {exam.questions.length} questions ·{" "}
+                  {formatTime(
+                    Math.round((exam.submittedAt - exam.startedAt) / 1000),
+                  )}{" "}
+                  total duration
+                </div>
+              )}
             </div>
             <nav className="exam-section-tabs" aria-label="Exam sections">
               {exam.sections.map((section, index) => (
@@ -1334,7 +1517,7 @@ export default function ExamExperience({
         ${index === currentSectionIndex ? "active" : ""}
         ${section.locked ? "locked" : ""}
       `}
-                  disabled={sectionalTiming || section.locked}
+                  disabled={!reviewMode && (sectionalTiming || section.locked)}
                   onClick={() => {
                     const qid = section.questionIds[0];
                     if (qid && !section.locked) navigateTo(qid);
@@ -1389,8 +1572,12 @@ export default function ExamExperience({
                   {(currentQuestion?.options || []).map((option, index) => (
                     <button
                       key={index}
-                      disabled={currentSection?.locked || currentSectionExpired}
-                      className={`exam-option ${exam.answers[currentQuestion.id]?.answerIndex === index ? "selected" : ""}`}
+                      disabled={
+                        reviewMode ||
+                        currentSection?.locked ||
+                        currentSectionExpired
+                      }
+                      className={`exam-option ${exam.answers[currentQuestion.id]?.answerIndex === index ? "selected" : ""} ${reviewMode && currentQuestion.correctAnswerIndex === index ? "review-correct" : ""} ${reviewMode && exam.answers[currentQuestion.id]?.answerIndex === index && exam.answers[currentQuestion.id]?.answerIndex !== currentQuestion.correctAnswerIndex ? "review-incorrect" : ""}`}
                       onClick={() => updateAnswer(index)}
                     >
                       <span>{LETTERS[index]}</span>
@@ -1431,24 +1618,117 @@ export default function ExamExperience({
                     </button>
                   ))}
                 </div>
+                {reviewMode &&
+                  (() => {
+                    const answer = exam.answers[currentQuestion.id] || {};
+                    const selectedIndex = answer.answerIndex;
+                    const correctIndex = currentQuestion.correctAnswerIndex;
+                    const hasKey = Number.isInteger(correctIndex);
+                    const isCorrect =
+                      Number.isInteger(selectedIndex) &&
+                      hasKey &&
+                      selectedIndex === correctIndex;
+                    const answerLabel = (index) =>
+                      Number.isInteger(index)
+                        ? `${LETTERS[index]}${
+                            currentQuestion.options?.[index]
+                              ? ` · ${String(currentQuestion.options[index])
+                                  .replace(/<[^>]*>/g, " ")
+                                  .slice(0, 90)}`
+                              : ""
+                          }`
+                        : "Not answered";
+                    return (
+                      <div className="exam-review-details">
+                        <div
+                          className={`exam-review-verdict ${!Number.isInteger(selectedIndex) ? "unanswered" : isCorrect ? "correct" : "incorrect"}`}
+                        >
+                          <strong>
+                            {!Number.isInteger(selectedIndex)
+                              ? "Unanswered"
+                              : isCorrect
+                                ? "Correct answer"
+                                : "Incorrect answer"}
+                          </strong>
+                          <span>
+                            {hasKey
+                              ? `Correct option: ${LETTERS[correctIndex]}`
+                              : "Current answer key is unavailable"}
+                          </span>
+                        </div>
+                        <div className="exam-review-metrics">
+                          {/* <div><small>Your answer</small><b>{answerLabel(selectedIndex)}</b></div>
+                      <div><small>Correct answer</small><b>{hasKey ? answerLabel(correctIndex) : "Unavailable"}</b></div> */}
+                          <div>
+                            <small>Time spent</small>
+                            <b>
+                              {formatTime(
+                                Math.round((answer.timeSpentMs || 0) / 1000),
+                              )}
+                            </b>
+                          </div>
+                          <div>
+                            <small>Visits</small>
+                            <b>{answer.visitCount || 0}</b>
+                          </div>
+                          <div>
+                            <small>Answer changes</small>
+                            <b>{answer.answerChangeCount || 0}</b>
+                          </div>
+                          <div>
+                            <small>Review flag</small>
+                            <b>{answer.marked ? "Marked" : "Not marked"}</b>
+                          </div>
+                        </div>
+                        {answer.answerChanges?.length > 0 && (
+                          <div className="exam-review-change-log">
+                            <strong>Answer change history</strong>
+                            {answer.answerChanges.map((change, index) => (
+                              <p key={`${change.at || index}-${index}`}>
+                                Change {index + 1}:{" "}
+                                {change.from === null
+                                  ? "No answer"
+                                  : LETTERS[change.from]}{" "}
+                                →{" "}
+                                {change.to === null
+                                  ? "Cleared"
+                                  : LETTERS[change.to]}
+                                {change.at
+                                  ? ` · ${new Date(change.at).toLocaleTimeString()}`
+                                  : ""}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 <div className="exam-question-actions">
-                  <button
-                    className="button outline"
-                    disabled={currentSection?.locked || currentSectionExpired}
-                    onClick={clearAnswer}
-                  >
-                    Clear response
-                  </button>
-                  <button
-                    className={`button ${exam.answers[currentQuestion.id]?.marked ? "light" : "outline"}`}
-                    disabled={currentSection?.locked || currentSectionExpired}
-                    onClick={toggleReview}
-                  >
-                    <Flag size={14} />{" "}
-                    {exam.answers[currentQuestion.id]?.marked
-                      ? "Unmark review"
-                      : "Mark for review"}
-                  </button>
+                  {!reviewMode && (
+                    <>
+                      <button
+                        className="button outline"
+                        disabled={
+                          currentSection?.locked || currentSectionExpired
+                        }
+                        onClick={clearAnswer}
+                      >
+                        Clear response
+                      </button>
+                      <button
+                        className={`button ${exam.answers[currentQuestion.id]?.marked ? "light" : "outline"}`}
+                        disabled={
+                          currentSection?.locked || currentSectionExpired
+                        }
+                        onClick={toggleReview}
+                      >
+                        <Flag size={14} />{" "}
+                        {exam.answers[currentQuestion.id]?.marked
+                          ? "Unmark review"
+                          : "Mark for review"}
+                      </button>
+                    </>
+                  )}
                   <div className="exam-spacer" />
                   <button
                     className="button outline"
@@ -1465,12 +1745,18 @@ export default function ExamExperience({
                     Previous
                   </button>
                   {!nextQuestionId ? (
-                    <button
-                      className="button primary"
-                      onClick={() => setConfirmSubmit(true)}
-                    >
-                      Submit exam
-                    </button>
+                    reviewMode ? (
+                      <button className="button primary" onClick={onClose}>
+                        Back to analytics
+                      </button>
+                    ) : (
+                      <button
+                        className="button primary"
+                        onClick={() => setConfirmSubmit(true)}
+                      >
+                        Submit exam
+                      </button>
+                    )
                   ) : (
                     <button
                       className="button primary"
@@ -1478,12 +1764,14 @@ export default function ExamExperience({
                         nextQuestionId && navigateTo(nextQuestionId)
                       }
                       disabled={
-                        !nextQuestionId ||
-                        currentSection?.locked ||
-                        currentSectionExpired
+                        !reviewMode &&
+                        (!nextQuestionId ||
+                          currentSection?.locked ||
+                          currentSectionExpired)
                       }
                     >
-                      Save & Next <ChevronRight size={15} />
+                      {reviewMode ? "Next question" : "Save & Next"}{" "}
+                      <ChevronRight size={15} />
                     </button>
                   )}
                 </div>
@@ -1497,16 +1785,19 @@ export default function ExamExperience({
                       exam.sections[sectionByQuestion[q.id]]?.locked;
 
                     const targetSectionIndex = sectionByQuestion[q.id] ?? 0;
-                    const allowed = sectionalTiming
-                      ? targetSectionIndex === currentSectionIndex
-                      : exam.config.sectionNavigation === "free" ||
-                        Math.abs(targetSectionIndex - currentSectionIndex) <= 1;
+                    const allowed =
+                      reviewMode ||
+                      (sectionalTiming
+                        ? targetSectionIndex === currentSectionIndex
+                        : exam.config.sectionNavigation === "free" ||
+                          Math.abs(targetSectionIndex - currentSectionIndex) <=
+                            1);
 
                     return (
                       <button
                         key={q.id}
                         data-palette-index={index}
-                        disabled={locked || !allowed}
+                        disabled={!reviewMode && (locked || !allowed)}
                         title={`${q.subject} · ${status}`}
                         className={`
                             palette-${status}
@@ -1548,7 +1839,14 @@ export default function ExamExperience({
                   <strong>
                     {Object.values(exam.answers).filter((a) => a.marked).length}
                   </strong>{" "}
-                  marked
+                  marked <span>·</span>{" "}
+                  <strong>
+                    {
+                      Object.values(exam.answers).filter((a) => !a.visited)
+                        .length
+                    }
+                  </strong>{" "}
+                  not visited
                 </div>
               </aside>
             </div>

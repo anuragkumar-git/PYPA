@@ -408,6 +408,7 @@ function App() {
   const [paperRecords, setPaperRecords] = useState([]);
   const [examOpen, setExamOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [reviewAttempt, setReviewAttempt] = useState(null);
 
   // Master subject/topic list stored in IndexedDB.
   const [categoryRecords, setCategoryRecords] = useState([]);
@@ -2348,6 +2349,11 @@ function App() {
         <AnalyticsDashboard
           papers={paperRecords}
           onBack={() => setAnalyticsOpen(false)}
+          onRevisit={(attempt) => {
+            setReviewAttempt(attempt);
+            setAnalyticsOpen(false);
+            setExamOpen(true);
+          }}
         />
       ) : (
         <main className="layout">
@@ -4834,7 +4840,12 @@ function App() {
           papers={paperRecords}
           imageUrls={imageUrls}
           onSavePaperSettings={savePaperExamSettings}
-          onClose={() => setExamOpen(false)}
+          reviewAttempt={reviewAttempt}
+          onClose={() => {
+            setExamOpen(false);
+            if (reviewAttempt) setAnalyticsOpen(true);
+            setReviewAttempt(null);
+          }}
         />
       )}
       <footer>
